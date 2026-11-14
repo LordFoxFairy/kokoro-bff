@@ -67,9 +67,26 @@ export async function handleChatEventsRequest(
         return
       }
       signal.throwIfAborted()
-      await consumers.registerConsumer(context.identity.namespace, businessPath[1] ?? "", conversation.ownerId)
+      // Project readers never register or change the producer's execution namespace.
+      if (conversation.projectRef === null) await consumers.registerConsumer(context.identity.namespace, businessPath[1] ?? "", context.identity.userId)
       signal.throwIfAborted()
-      await liveAgentSessionEvents(request, response, config, context, businessPath[1] ?? "", projection, sourceProjectionActive, runtime, signal)
+      const expiresAt = Date.parse(admitted.expiresAt)
+      await liveAgentSessionEvents(request, response, config, context, businessPath[1] ?? "", projection, sourceProjectionActive, runtime, signal, {
+        sharedProject: conversation.projectRef !== null,
+        authorize: async () => {
+          // Session/tenant membership is admitted at the existing native boundary; no per-frame IAM/OAuth call.
+          if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) return { status: 401, code: "session_invalid" }
+          const current = await findConversation(context.identity.namespace, context.identity.userId, businessPath[1] ?? "", authorization.projectRef, {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+            deadlineAt: performance.now() + 10000,
+          })
+          signal.throwIfAborted()
+          if (Date.now() >= expiresAt) return { status: 401, code: "session_invalid" }
+          if (current === null || current.projectRef !== conversation.projectRef || current.conversationId !== conversation.conversationId) return false
+          if (current.projectRef !== null && !current.projectAccess) return false
+          return { ok: true, canEdit: current.projectRef === null || current.projectAccess!.capabilities.includes("edit") }
+        },
+      })
       signal.throwIfAborted()
     } catch {
       if (!signal.aborted && !response.headersSent && !response.writableEnded && !response.destroyed)

@@ -70,8 +70,16 @@ export function telegramConnectionConfig(env: NodeJS.ProcessEnv): TelegramConnec
   const webhookSecret = env.KOKORO_TELEGRAM_WEBHOOK_SECRET
   if (!token && !username && !webhookSecret) return null
   const botId = /^([1-9][0-9]{0,15}):[A-Za-z0-9_-]{20,128}$/u.exec(token ?? "")?.[1]
-  if (!botId || Number(botId) > 2 ** 52 - 1 || !token || !username || !/^[A-Za-z][A-Za-z0-9_]{1,28}bot$/iu.test(username) ||
-      !webhookSecret || !/^[A-Za-z0-9_-]{32,256}$/u.test(webhookSecret) || webhookSecret === token) {
+  if (
+    !botId ||
+    Number(botId) > 2 ** 52 - 1 ||
+    !token ||
+    !username ||
+    !/^[A-Za-z][A-Za-z0-9_]{1,28}bot$/iu.test(username) ||
+    !webhookSecret ||
+    !/^[A-Za-z0-9_-]{32,256}$/u.test(webhookSecret) ||
+    webhookSecret === token
+  ) {
     throw new Error("Telegram connection configuration is incomplete or invalid")
   }
   return { botId, username, token, webhookSecret }
@@ -83,9 +91,18 @@ function lineConnectionConfig(env: NodeJS.ProcessEnv, webOrigin: string | null):
   const accessToken = env.KOKORO_LINE_CHANNEL_ACCESS_TOKEN
   const channelSecret = env.KOKORO_LINE_CHANNEL_SECRET
   if (!botId && !accountId && !accessToken && !channelSecret) return null
-  if (!botId || !/^U[0-9a-f]{32}(?![\s\S])/u.test(botId) || !accountId || !/^@[A-Za-z0-9._-]{1,64}(?![\s\S])/u.test(accountId) ||
-      !accessToken || !/^[!-~]{16,4096}(?![\s\S])/u.test(accessToken) || !channelSecret ||
-      !/^[!-~]{32,256}(?![\s\S])/u.test(channelSecret) || accessToken === channelSecret || !webOrigin?.startsWith("https://")) {
+  if (
+    !botId ||
+    !/^U[0-9a-f]{32}(?![\s\S])/u.test(botId) ||
+    !accountId ||
+    !/^@[A-Za-z0-9._-]{1,64}(?![\s\S])/u.test(accountId) ||
+    !accessToken ||
+    !/^[!-~]{16,4096}(?![\s\S])/u.test(accessToken) ||
+    !channelSecret ||
+    !/^[!-~]{32,256}(?![\s\S])/u.test(channelSecret) ||
+    accessToken === channelSecret ||
+    !webOrigin?.startsWith("https://")
+  ) {
     throw new Error("LINE connection configuration is incomplete or invalid")
   }
   return { botId, accountId, accessToken, channelSecret, webOrigin }
@@ -96,9 +113,15 @@ function slackConnectionConfig(env: NodeJS.ProcessEnv, webOrigin: string | null)
   const clientId = env.KOKORO_SLACK_CLIENT_ID
   const clientSecret = env.KOKORO_SLACK_CLIENT_SECRET
   if (!appId && !clientId && !clientSecret) return null
-  if (!appId || !/^A[A-Z0-9]{1,63}(?![\s\S])/u.test(appId) ||
-      !clientId || !/^[0-9]{1,32}\.[0-9]{1,32}(?![\s\S])/u.test(clientId) ||
-      !clientSecret || !/^[!-~]{16,256}(?![\s\S])/u.test(clientSecret) || !webOrigin?.startsWith("https://")) {
+  if (
+    !appId ||
+    !/^A[A-Z0-9]{1,63}(?![\s\S])/u.test(appId) ||
+    !clientId ||
+    !/^[0-9]{1,32}\.[0-9]{1,32}(?![\s\S])/u.test(clientId) ||
+    !clientSecret ||
+    !/^[!-~]{16,256}(?![\s\S])/u.test(clientSecret) ||
+    !webOrigin?.startsWith("https://")
+  ) {
     throw new Error("Slack connection configuration is incomplete or invalid")
   }
   return { appId, clientId, clientSecret, redirectUri: webOrigin + "/api/agents/connections/slack/callback" }
@@ -147,6 +170,7 @@ export type BffConfig = {
     credentialFile: string
     timeoutMs: number
   }> | null
+  customApiAdmin?: Readonly<{ baseUrl: string; credentialFile: string }> | null
   customApi?: Readonly<{ baseUrl: string; credentialFile: string }> | null
   platformProjection: Readonly<{
     baseUrl: string | null
@@ -489,6 +513,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
         credentialFile,
         timeoutMs: upstreamTimeoutMs,
       }
+    })(),
+    customApiAdmin: (() => {
+      const credentialFile = env.KOKORO_BFF_PLATFORM_CUSTOM_API_ADMIN_CREDENTIALS_FILE?.trim() || null
+      if (credentialFile === null) return null
+      if (!skillDraft.platformBaseUrl) throw new Error("custom_api_admin_configuration_incomplete")
+      return { baseUrl: skillDraft.platformBaseUrl, credentialFile }
     })(),
     customApi: (() => {
       const credentialFile = env.KOKORO_BFF_PLATFORM_CUSTOM_API_CREDENTIALS_FILE?.trim() || null

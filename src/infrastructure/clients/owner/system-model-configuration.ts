@@ -11,6 +11,8 @@ import {
   zCreateModelDefinitionResponse,
   zCreateModelRevisionBody,
   zCreateModelRevisionResponse,
+  zUpdateModelRevisionDraftBody,
+  zUpdateModelRevisionDraftResponse,
   zPublishModelRevisionResponse,
   zCreateModelLabelBody,
   zCreateModelLabelResponse,
@@ -75,6 +77,17 @@ export const modelConfigurationOperations = {
     body: zCreateModelRevisionBody,
     response: zCreateModelRevisionResponse,
   },
+  updateRevision: {
+    method: "PATCH",
+    publicPath: "model-revisions",
+    ownerPath: "model-catalog/revisions",
+    permission: "system:write",
+    // The owner's nonempty-object refinement is not representable in its
+    // generated input artifact; retain it at this public request boundary.
+    body: zUpdateModelRevisionDraftBody.refine((body) => Object.keys(body).length > 0),
+    response: zUpdateModelRevisionDraftResponse,
+    conditional: true,
+  },
   publishRevision: {
     method: "POST",
     publicPath: "model-revisions",
@@ -109,12 +122,15 @@ export function matchModelConfiguration(method: string, path: readonly string[])
   if (path.length === 4 && path[1] === "model-revisions" && path[3] === "publish" && method === "POST" && uuid.test(path[2] ?? ""))
     return { operation: "publishRevision", id: path[2]! }
   if (path.length === 3 && path[1] === "model-labels" && method === "PATCH" && uuid.test(path[2] ?? "")) return { operation: "updateLabel", id: path[2]! }
+  if (path.length === 3 && path[0] === "admin" && path[1] === "model-revisions" && method === "PATCH" && uuid.test(path[2] ?? ""))
+    return { operation: "updateRevision", id: path[2]! }
   if (path.length !== 2) return null
   for (const [operation, spec] of Object.entries(modelConfigurationOperations)) {
     if (
       operation !== "upstreamModels" &&
       operation !== "publishRevision" &&
       operation !== "updateLabel" &&
+      operation !== "updateRevision" &&
       method === spec.method &&
       path[1] === spec.publicPath
     )
@@ -200,6 +216,8 @@ export async function systemModelConfiguration(input: ModelConfigurationInput): 
         return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
     }
   if (input.operation === "publishRevision" && (!("published_at" in data) || data.published_at === null || ("retired_at" in data && data.retired_at !== null)))
+    return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
+  if (input.operation === "updateRevision" && (!("published_at" in data) || data.published_at !== null || !("retired_at" in data) || data.retired_at !== null))
     return { ok: false, status: 502, code: "admin_model_routing_response_invalid" }
   if (input.signal.aborted || Date.now() >= input.deadlineAt) return { ok: false, status: 503, code: "admin_model_routing_unavailable" }
   return { ok: true, data }

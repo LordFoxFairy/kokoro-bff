@@ -1,3 +1,5 @@
+import { withMessageReadClient, messageReadLifetime } from "./message-parts-read.js"
+import { lockProjectForEdit, projectReadPredicate, projectEditPredicate } from "./project-access.js"
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg"
 import { randomUUID } from "node:crypto"
 
@@ -75,12 +77,28 @@ export function createProjectLookup(pool: Pick<Pool, "query">): ProjectLookup {
   return { find: (scope, idOrSlug) => findOwnedProject(pool, scope, idOrSlug) }
 }
 
+/** Explicit read/edit lookup uses canonical IDs only. The private owner lookup retains legacy slug semantics. */
+export function createProjectCapabilityLookup(pool: Pick<Pool, "query" | "connect">, capability: "read" | "edit"): ProjectLookup {
+  return {
+    find: async (scope, projectId, lifetime) =>
+      withMessageReadClient(pool, messageReadLifetime(lifetime), async (client) => {
+        const result = await client.query<ProjectRow>(
+          `SELECT project_id,tenant_id,owner_id,name,slug,description,instruction,created_at,updated_at FROM bff_project
+        WHERE tenant_id=$1 AND deleted_at IS NULL AND project_id=$3
+          AND ${capability === "read" ? projectReadPredicate : projectEditPredicate} LIMIT 1`,
+          [scope.tenantId, scope.subjectId, projectId],
+        )
+        return result.rows[0] ? projectFromRow(result.rows[0]) : null
+      }),
+  }
+}
+
 export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
   async function list(scope: ProjectOwnerScope): Promise<Project[]> {
     const result = await pool.query<ProjectRow>(
       `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
          FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL
+        WHERE tenant_id = $1 AND bff_project.deleted_at IS NULL AND ${projectReadPredicate}
         ORDER BY created_at ASC, project_id ASC`,
       [scope.tenantId, scope.subjectId],
     )
@@ -88,7 +106,7 @@ export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
   }
 
   async function revisions(scope: ProjectOwnerScope, idOrSlug: string): Promise<ProjectInstructionRevision[] | null> {
-    const project = await findOwnedProject(pool, scope, idOrSlug)
+    const project = await createProjectCapabilityLookup(pool, "read").find(scope, idOrSlug)
     if (project === null) return null
     const result = await pool.query<RevisionRow>(
       `SELECT revision_id, instruction, updated_at, actor_id, current
@@ -98,7 +116,7 @@ export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
             SELECT 1 FROM bff_project
              WHERE bff_project.tenant_id = bff_project_instruction_revision.tenant_id
                AND bff_project.project_id = bff_project_instruction_revision.project_id
-               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
+               AND bff_project.deleted_at IS NULL AND ${projectReadPredicate.replaceAll("$2", "$3")}
           )
         ORDER BY updated_at DESC, revision_id DESC`,
       [scope.tenantId, project.id, scope.subjectId],
@@ -106,7 +124,11 @@ export function createProjectReadStore(pool: Pick<Pool, "query" | "connect">) {
     return result.rows.map(revisionFromRow)
   }
 
-  return { list, revisions, readWebsites: (input: WebsiteQuery) => readProjectWebsites(pool, input) }
+  return {
+    list,
+    revisions,
+    readWebsites: (input: WebsiteQuery) => readProjectWebsites(pool, input),
+  }
 }
 
 export type ProjectReadStore = ReturnType<typeof createProjectReadStore>
@@ -136,11 +158,14 @@ function projectMutationCommands(pool: Pick<Pool, "query">) {
   }
 
   async function updateInstruction(scope: ProjectOwnerScope, idOrSlug: string, instruction: string): Promise<Project | null> {
+    const access = await lockProjectForEdit(pool, scope, idOrSlug)
+    if (access.kind !== "editable") return null
+    const projectId = access.projectId
     const project = await pool.query<ProjectRow>(
       `UPDATE bff_project SET instruction = $4, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
+          WHERE tenant_id = $1 AND ${projectEditPredicate} AND bff_project.deleted_at IS NULL AND project_id = $3
           RETURNING project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at`,
-      [scope.tenantId, scope.subjectId, idOrSlug, instruction],
+      [scope.tenantId, scope.subjectId, projectId, instruction],
     )
     const row = project.rows[0]
     if (row === undefined) return null
@@ -189,14 +214,19 @@ export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">
     return transaction(async (client) => {
       // Claim/reclaim and release must wait for this lock. Recheck before *any* business write:
       // a stale same-intent writer replays a completed receipt rather than running the command again.
-      const locked = await client.query<{ fingerprint: string; status: number; body: unknown }>(
-        "SELECT fingerprint, status, response_body AS body FROM bff_idempotency_receipt WHERE scope = $1 FOR UPDATE",
-        [mutation.scope],
-      )
+      const locked = await client.query<{
+        fingerprint: string
+        status: number
+        body: unknown
+      }>("SELECT fingerprint, status, response_body AS body FROM bff_idempotency_receipt WHERE scope = $1 FOR UPDATE", [mutation.scope])
       const current = locked.rows[0]
       if (!current) return { kind: "missing" }
       if (current.fingerprint !== mutation.fingerprint) return { kind: "conflict" }
-      if (current.status !== PENDING_RECEIPT_STATUS) return { kind: "receipt", receipt: { status: current.status, body: current.body } }
+      if (current.status !== PENDING_RECEIPT_STATUS)
+        return {
+          kind: "receipt",
+          receipt: { status: current.status, body: current.body },
+        }
       const receipt = await work(projectMutationCommands(client))
       await new PostgresIdempotencyRepository(client).putReceipt(mutation.scope, { fingerprint: mutation.fingerprint, ...receipt })
       return { kind: "receipt", receipt }
@@ -214,11 +244,21 @@ export function createProjectMutationStore(pool: Pick<Pool, "query" | "connect">
 
 export type ProjectMutationStore = ReturnType<typeof createProjectMutationStore>
 
-type WebsiteQuery = ProjectOwnerScope & { projectId: string; signal: AbortSignal }
-type WebsiteWrite = WebsiteQuery & { websites: string[]; expectedStateVersion: string }
-type WebsiteRow = { project_id: string; website_urls: unknown; websites_state_version: number }
-type WebsiteWriteResult = { kind: "replaced"; data: ProjectWebsites } | { kind: "not_found" } | { kind: "precondition_failed" }
-const websiteScope = "tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL"
+type WebsiteQuery = ProjectOwnerScope & {
+  projectId: string
+  signal: AbortSignal
+}
+type WebsiteWrite = WebsiteQuery & {
+  websites: string[]
+  expectedStateVersion: string
+}
+type WebsiteRow = {
+  project_id: string
+  website_urls: unknown
+  websites_state_version: number
+}
+type WebsiteWriteResult = { kind: "replaced"; data: ProjectWebsites } | { kind: "not_found" } | { kind: "forbidden" } | { kind: "precondition_failed" }
+const websiteScope = `tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectReadPredicate}`
 const websiteColumns = "project_id,website_urls,websites_state_version"
 
 function websiteState(row: WebsiteRow): ProjectWebsites {
@@ -313,7 +353,9 @@ async function readProjectWebsites(pool: Pick<Pool, "connect">, input: WebsiteQu
 async function replaceProjectWebsites(pool: Pick<Pool, "connect">, input: WebsiteWrite): Promise<WebsiteWriteResult> {
   return websiteTransaction(pool, input.signal, true, async (query) => {
     const scope = [input.tenantId, input.subjectId, input.projectId]
-    const locked = await query<WebsiteRow>(`SELECT ${websiteColumns} FROM bff_project WHERE ${websiteScope} FOR UPDATE`, scope)
+    const access = await lockProjectForEdit({ query }, input, input.projectId)
+    if (access.kind !== "editable") return { kind: access.kind }
+    const locked = await query<WebsiteRow>(`SELECT ${websiteColumns} FROM bff_project WHERE ${websiteScope}`, scope)
     const row = locked.rows[0]
     if (!row) return { kind: "not_found" }
     const current = websiteState(row)

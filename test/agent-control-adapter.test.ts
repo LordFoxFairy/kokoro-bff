@@ -15,8 +15,8 @@ import {
   AGUI_RUN_CONTROL_READER,
   BFF_CONFIG,
   BFF_DATABASE,
-  CHAT_CONVERSATION_LOOKUP,
-  PROJECT_LOOKUP,
+  CHAT_READABLE_CONVERSATION_LOOKUP,
+  PROJECT_READ_LOOKUP,
   SESSION_ADMISSION,
 } from "../dist/common/tokens.js"
 import { BFF_NEST_APPLICATION_OPTIONS } from "../dist/main.js"
@@ -97,7 +97,8 @@ async function startAgentControlApp(
 ): Promise<string> {
   const admission = new SessionAdmissionDouble({ "control-session": { namespace: "tenant_control", userId: "user_control" } })
   const findConversation: ChatConversationLookup =
-    readers.findConversation ?? (async (tenantId, subjectId, sessionId) => {
+    readers.findConversation ??
+    (async (tenantId, subjectId, sessionId) => {
       if (!authorized || tenantId !== "tenant_control" || subjectId !== "user_control") return null
       return {
         conversationId: sessionId,
@@ -118,11 +119,11 @@ async function startAgentControlApp(
     .useValue({ pool: Object.freeze({}), redis: Object.freeze({}) })
     .overrideProvider(SESSION_ADMISSION)
     .useValue(admission)
-    .overrideProvider(CHAT_CONVERSATION_LOOKUP)
+    .overrideProvider(CHAT_READABLE_CONVERSATION_LOOKUP)
     .useValue(findConversation)
     .overrideProvider(AGUI_RUN_CONTROL_READER)
     .useValue(readers.readControl ?? (() => assert.fail("The control route must not read the execution head in this fixture")))
-    .overrideProvider(PROJECT_LOOKUP)
+    .overrideProvider(PROJECT_READ_LOOKUP)
     .useValue({ find: async () => null })
     .overrideProvider(AGENT_CONTROL_IDEMPOTENCY)
     .useValue(receipts)
@@ -650,4 +651,65 @@ test("startup cancel never renews its absolute request budget or invents a recei
   assert.ok([404, 502].includes(response.status), "budget expiry never fabricates an accepted command")
   await response.arrayBuffer()
   assert.ok(calls >= 1 && calls <= 2, "the absolute budget is not renewed for each owner delivery")
+})
+
+test("Project viewer cannot cancel an own admitted Run through readable-only access", async () => {
+  let calls = 0,
+    role: "viewer" | "editor" = "viewer"
+  const agentBase = await listen(
+    createServer((_req, res) => {
+      calls++
+      res.writeHead(202, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          data: { command_id: "editor-stop", request_digest: canonicalDigest, status: "pending", replayed: false },
+          meta: { request_id: "owner" },
+        }),
+      )
+    }),
+  )
+  const base = await startAgentControlApp(config(agentBase), true, {
+    findConversation: async () => ({
+      conversationId: "session_control",
+      tenantId: "tenant_control",
+      title: "Shared",
+      ownerId: "creator",
+      projectRef: "project_shared",
+      status: "active",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+      deletedAt: null,
+      projectAccess: {
+        project_id: "project_shared",
+        role,
+        access_version: "2",
+        expires_at: null,
+        capabilities: role === "editor" ? ["read", "edit"] : ["read"],
+      },
+    }),
+  })
+  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("viewer-stop"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(calls, 0, "readable Project access must never dispatch a new cancel")
+  assert.equal(response.status, 404)
+  role = "editor"
+  const allowed = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("editor-stop"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(allowed.status, 202)
+  const accepted = await allowed.json()
+  assert.equal(calls, 1, "current edit access preserves the original one-call cancel path")
+  role = "viewer"
+  const replay = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("editor-stop"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+  assert.equal(replay.status, 202, "losing edit access does not discard the original actor's safe accepted ACK")
+  assert.deepEqual(await replay.json(), accepted)
+  assert.equal(calls, 1, "ACK recovery never dispatches the control again")
 })

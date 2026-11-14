@@ -1,3 +1,4 @@
+import { zLaunchRequest } from "../../generated/agent-http/zod.gen.js"
 import { isRecord } from "../../domain/json.js"
 import { parseCustomApiProfileSelection } from "../../domain/chat/custom-api-profile-selection.js"
 import { parseMcpConnectionSelection } from "../../domain/chat/mcp-connection-selection.js"
@@ -115,6 +116,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "content",
           "project_ref",
           "project_instruction",
+          "personal_context",
+          "shared_conversation_context",
           "selected_skill_source_refs",
           "selected_mcp_connection_ids",
           "selected_custom_api_profiles",
@@ -157,6 +160,15 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   const selectedResourceRefs =
     launchValue.selected_resource_refs === undefined ? undefined : parseCanonicalResourceReferences(launchValue.selected_resource_refs)
   if (selectedResourceRefs === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const personal = zLaunchRequest.shape.personal_context.safeParse(launchValue.personal_context)
+  if (!personal.success || (Object.hasOwn(launchValue, "personal_context") && personal.data == null)) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const shared = zLaunchRequest.shape.shared_conversation_context.safeParse(launchValue.shared_conversation_context)
+  if (
+    !shared.success ||
+    (Object.hasOwn(launchValue, "shared_conversation_context") && shared.data == null) ||
+    (shared.data && (shared.data.project_ref !== launchValue.project_ref || shared.data.conversation_id !== launchValue.session_id))
+  )
+    throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const requestedModel = optionalString(launchValue, "requested_model_label")
@@ -171,6 +183,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       content: requiredString(launchValue.content, "AGENT_DISPATCH_PAYLOAD_INVALID"),
       project_ref: executionProject,
       ...(projectInstruction === undefined ? {} : { project_instruction: projectInstruction }),
+      ...(personal.data == null ? {} : { personal_context: personal.data }),
+      ...(shared.data == null ? {} : { shared_conversation_context: shared.data }),
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(selectedMcpConnectionIds === undefined ? {} : { selected_mcp_connection_ids: selectedMcpConnectionIds }),
       ...(selectedCustomApiProfiles === undefined ? {} : { selected_custom_api_profiles: selectedCustomApiProfiles }),

@@ -17,7 +17,8 @@ const NATIVE_COOKIE_NAMES = new Set([
 ])
 
 export type UserAdmissionResult =
-  Readonly<{ ok: true; context: AdmittedUserRequestContext }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
+  | Readonly<{ ok: true; context: AdmittedUserRequestContext; expiresAt?: string }>
+  | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
 
 function authorizationValues(request: IncomingMessage): string[] {
   const values: string[] = []
@@ -94,7 +95,7 @@ export async function authorizeUserRequest(
   const result = await authenticateBrowserRequest(request, config, admission, requestId, signal)
   writeSessionCookies(response, result.setCookies)
   if (!result.ok) return result
-  return { ok: true, context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin } }
+  return { ok: true, context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin }, expiresAt: result.expiresAt }
 }
 
 /** Human admission is fresh for every Skill command and Skills admin read. */

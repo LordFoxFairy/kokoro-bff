@@ -219,9 +219,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.21.0 owner artifact without retired workload introspection or BFF admission operations", async () => {
-  const commit = "b6a9745b340149808afb1aae357574d0aa7bbad3"
-  const digest = "d279907ae52e0f8594ee28a388f22c9d79e298e8e49caeb2efc3ca2291cdf0b9"
+test("the IAM consumer pins the complete 0.22.0 owner artifact without retired workload introspection or BFF admission operations", async () => {
+  const commit = "814ba4c423b631cab28929048c7203f2d14822fc"
+  const digest = "fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -233,11 +233,11 @@ test("the IAM consumer pins the complete 0.21.0 owner artifact without retired w
   const sha256 = (value) => createHash("sha256").update(value).digest("hex")
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
-  assert.equal(manifest.owner.contract_version, "0.21.0")
+  assert.equal(manifest.owner.contract_version, "0.22.0")
   assert.equal(owner.paths["/internal/v1/platform-workload-tokens/introspect"], undefined)
   assert.equal(owner.components.securitySchemes.platformResourceServerBasic, undefined)
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.21.0")
+  assert.equal(owner.info.version, "0.22.0")
   // This operation still serves independent OAuth consumers; only the BFF include is retired.
   assert.ok(owner.paths["/internal/v1/session-authorizations/verify"])
   for (const [ownerPath, method] of [
@@ -255,6 +255,16 @@ test("the IAM consumer pins the complete 0.21.0 owner artifact without retired w
       false,
     )
   }
+  const auditOperation = owner.paths["/internal/v1/audit-events"].get
+  assert.deepEqual(auditOperation.security, [{ internalBearer: [] }, { bffUserContextServiceBearer: [] }])
+  assert.equal(
+    auditOperation.parameters.some(({ name }) => name === "x-kokoro-actor-id"),
+    true,
+  )
+  assert.equal(
+    auditOperation.parameters.some(({ name }) => name === "Cookie" || name === "Origin"),
+    false,
+  )
   const profileOperation = owner.paths["/internal/v1/account/profile"].get
   assert.deepEqual(profileOperation.security, [{ internalBearer: [] }, { bffUserContextServiceBearer: [] }])
   assert.equal(
@@ -269,7 +279,7 @@ test("the IAM consumer pins the complete 0.21.0 owner artifact without retired w
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.21.0",
+    contract_version: "0.22.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -288,6 +298,7 @@ test("the IAM consumer pins the complete 0.21.0 owner artifact without retired w
   assert.equal(manifest.generated.length, 16)
   assert.doesNotMatch(sdk, /export const (?:verifySessionAuthorization|verifyNativeSession)\b/u)
   for (const operation of [
+    "listAuditEvents",
     "listAccountSessions",
     "revokeAccountSession",
     "listTenantMembers",
@@ -315,6 +326,7 @@ test("the IAM consumer pins the complete 0.21.0 owner artifact without retired w
     "getTenantInvitationContext",
     "leaveTenant",
     "listAccountSessions",
+    "listAuditEvents",
     "listTenantInvitations",
     "listTenantMembers",
     "listTenantRoles",
@@ -895,7 +907,26 @@ test("SET13 actual builtin permission fields are declared by the public contract
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const permissions = load(source).components.schemas.TeamRole.properties.permissions
   assert.deepEqual(permissions.properties.platform.items.enum, ["execute"])
-  assert.equal(permissions.properties.skill.items.enum.length, 15)
+  // Public28.37 already carries the fixed owner's delete_series permission.
+  // Assert the closed published set, not the earlier 15-action cardinality.
+  assert.deepEqual(permissions.properties.skill.items.enum, [
+    "create_draft",
+    "create_version",
+    "delete_series",
+    "begin_upload",
+    "complete_upload",
+    "abort_upload",
+    "validate_draft",
+    "publish",
+    "withdraw",
+    "set_status",
+    "install",
+    "set_installation_enabled",
+    "remove_installation",
+    "update_draft",
+    "discard_draft",
+    "set_publication_audience",
+  ])
   assert.equal(permissions.additionalProperties, false)
 })
 

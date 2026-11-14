@@ -124,6 +124,36 @@ const acknowledgementServer = z
 // Only current representations require transport; old completed ACKs remain historical facts.
 const currentServer = acknowledgementServer.safeExtend({ transport: z.enum(["streamable_http", "sse_compat"]) })
 
+/** A new local identity is not a connection or restored old authorization. */
+export const mcpReauthorizationResponseSchema = z
+  .object({
+    server: currentServer.safeExtend({
+      status: z.literal("pending"),
+      prepare_status: z.literal("pending_prepare"),
+      availability: z.literal("unavailable"),
+      declarations: z.array(declaration).max(0),
+      declarations_available: z.literal(false),
+      declaration_digest: z.never().optional(),
+      connection_id: z.never().optional(),
+      authorization_status: z.never().optional(),
+    }),
+    connector: mcpPersonalConnectorSchema.safeExtend({
+      connector_type: z.literal("mcp"),
+      status: z.literal("pending"),
+      state_version: z.literal("1"),
+      enabled: z.literal(false),
+      availability: z.literal("unavailable"),
+      approved_scopes: z.array(z.string()).max(0),
+      server_id: id,
+    }),
+    replayed: z.boolean(),
+  })
+  .strict()
+  .superRefine(({ server, connector }, context) => {
+    if (connector.server_id !== server.server_id || connector.provider_key !== `private-${server.server_id}`)
+      context.addIssue({ code: "custom", message: "new private identity binding mismatch" })
+  })
+
 /** The lookup returns an old ACK, never a current resource or negative outcome. */
 export const mcpPrepareReceiptResponseSchema = z
   .object({
@@ -248,6 +278,24 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
       replayed: value.replayed,
     }
     if (result.server_id !== input.id || result.deleted !== true || typeof result.replayed !== "boolean") throw new Error("mcp_personal_response_invalid")
+    return result
+  }
+  if (operation === "reauthorizeServer") {
+    if (Object.keys(value).some((key) => !["$typeName", "$unknown", "server", "connector", "replayed"].includes(key)))
+      throw new Error("mcp_personal_response_invalid")
+    const result = mcpReauthorizationResponseSchema.parse({
+      server: projectServer(value.server, true),
+      connector: projectMcpPersonalConnector(value.connector),
+      replayed: value.replayed,
+    })
+    if (
+      result.server.server_id !== input.id ||
+      !input.sourceConnectorId ||
+      result.connector.connector_id === input.sourceConnectorId ||
+      !input.expectedServerStateVersion ||
+      BigInt(result.server.state_version) !== BigInt(input.expectedServerStateVersion) + 1n
+    )
+      throw new Error("mcp_personal_response_invalid")
     return result
   }
   const completedReplay = value.replayed === true && typeof input.commandId === "string" && /^[\x21-\x7e]{1,191}(?![\s\S])/u.test(input.commandId)

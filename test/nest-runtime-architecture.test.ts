@@ -22,6 +22,7 @@ test("the compiled production AppModule resolves its real provider graph without
     BFF_POOL,
     BFF_REDIS,
     CHAT_CONVERSATION_LOOKUP,
+    CHAT_READABLE_CONVERSATION_LOOKUP,
     CHAT_SESSION_READS,
     CHAT_SESSION_MUTATIONS,
     CHAT_ARCHIVE,
@@ -30,6 +31,7 @@ test("the compiled production AppModule resolves its real provider graph without
     CHAT_MOVE,
     CHAT_TURN_SERVICE,
     PROJECT_LOOKUP,
+    PROJECT_READ_LOOKUP,
     PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
     PROJECT_MCP_RECOMMENDATIONS_STORE,
     PROJECT_PINS,
@@ -121,7 +123,7 @@ test("the compiled production AppModule resolves its real provider graph without
     const recommendations = projectAccess.get(PROJECT_MCP_RECOMMENDATIONS_STORE, { strict: true })
     assert.deepEqual(Reflect.ownKeys(recommendations), ["mcpRecommendations", "replaceMcpRecommendations"])
     assert.equal(module.select(McpModule).get(PROJECT_MCP_RECOMMENDATIONS_PROVIDER, { strict: true }).project, recommendations)
-    assert.equal(projectAccess.get(PROJECT_SKILL_SELECTION_PROVIDER, { strict: true }).find, lookup.find)
+    assert.equal(projectAccess.get(PROJECT_SKILL_SELECTION_PROVIDER, { strict: true }).find, projectAccess.get(PROJECT_READ_LOOKUP, { strict: true }).find)
     assert.deepEqual(Reflect.ownKeys(projectAccess.get(PROJECT_PINS, { strict: true })), ["listPins", "setPin"])
     const tasks = projectAccess.get(PROJECT_TASKS, { strict: true })
     assert.deepEqual(Reflect.ownKeys(tasks), ["list", "write"])
@@ -138,7 +140,7 @@ test("the compiled production AppModule resolves its real provider graph without
     assert.equal(typeof reader.readSubmittedAgentRun, "function")
     const display = module.select(AgentRunsModule).get(RUN_DISPLAY_PROVIDER, { strict: true })
     assert.equal(display.submittedAgentRuns, reader)
-    assert.equal(display.findConversation, module.select(ChatModule).get(CHAT_CONVERSATION_LOOKUP, { strict: true }))
+    assert.equal(display.findConversation, module.select(ChatModule).get(CHAT_READABLE_CONVERSATION_LOOKUP, { strict: true }))
     assert.equal(display.readRunFinalAnswer, module.select(AgentRunsModule).get(RUN_FINAL_ANSWER_LOOKUP, { strict: true }))
   } finally {
     await module.close()
@@ -707,7 +709,12 @@ test("production Nest retires AG-UI transports before worker drain while retaini
       }
       const findConversation = async () => {
         await atPhase("authorization")
-        return { ownerId: "owner_agui_close" }
+        return {
+          ownerId: "owner_agui_close",
+          conversationId: "session_agui_close",
+          projectRef: phase === "project" ? "project_agui_close" : null,
+          ...(phase === "project" ? { projectAccess: { capabilities: ["read", "edit", "manage"] } } : {}),
+        }
       }
       const projects = {
         find: async () => {
@@ -746,8 +753,8 @@ test("production Nest retires AG-UI transports before worker drain while retaini
         [tokens.BFF_CONFIG, config],
         [tokens.BFF_DATABASE, database],
         [tokens.SESSION_ADMISSION, admission],
-        [tokens.CHAT_CONVERSATION_LOOKUP, findConversation],
-        [tokens.PROJECT_LOOKUP, projects],
+        [tokens.CHAT_READABLE_CONVERSATION_LOOKUP, findConversation],
+        [tokens.PROJECT_READ_LOOKUP, projects],
         [tokens.AGUI_PROJECTION_CONSUMERS, consumers],
         [tokens.AGUI_PROJECTION, projection],
         [tokens.AGUI_SOURCE_PROJECTION_ACTIVE, true],
@@ -1322,7 +1329,6 @@ test("production Nest collects finite shutdown failures without skipping cleanup
     })
   }
 })
-
 
 test("source-mode health probes resolve without emitted decorator metadata", async () => {
   const { spawnSync } = await import("node:child_process")

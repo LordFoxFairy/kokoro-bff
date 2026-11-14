@@ -1,9 +1,11 @@
+import { projectReadPredicate } from "./project-access.js"
 import { createHash } from "node:crypto"
 import type { Pool, QueryResult, QueryResultRow } from "pg"
 import type { MessageReadLifetime } from "../../application/chat/types.js"
 import { FINAL_ANSWER_MAX_BYTES } from "../../domain/chat/resource-reference-selection.js"
 import { withMessageReadClient } from "./message-parts-read.js"
 import { parseMessageParts } from "./message-parts.js"
+import { readCurrentConversation } from "./chat-conversation-access.js"
 
 export type RunFinalAnswerQuery = MessageReadLifetime &
   Readonly<{
@@ -54,19 +56,20 @@ export async function selectedFinalAnswerInTransaction(
        FROM bff_message m
        JOIN bff_conversation c ON c.tenant_id=m.tenant_id AND c.conversation_id=m.conversation_id
        JOIN bff_agent_dispatch_outbox d ON d.tenant_id=m.tenant_id AND d.conversation_id=m.conversation_id
-         AND d.run_id=m.run_id AND d.assistant_message_id=m.message_id AND d.subject_id=$2
-      WHERE m.tenant_id=$1 AND c.owner_id=$2 AND m.message_id=$3
+         AND d.run_id=m.run_id AND d.assistant_message_id=m.message_id AND d.subject_id=d.actor_id
+      WHERE m.tenant_id=$1 AND m.message_id=$3
         AND c.status='active' AND m.role='assistant' AND m.status='completed'
         AND m.final_segment_id IS NOT NULL AND m.parts_format_version=1 AND m.parts_public_sequence>0
         AND d.execution_context_retired_at IS NULL AND d.execution_project_ref IS NOT DISTINCT FROM $4::text
-        AND (($4::text IS NULL AND c.project_ref IS NULL) OR EXISTS (
-          SELECT 1 FROM bff_project p
-           WHERE p.tenant_id=c.tenant_id AND p.owner_id=c.owner_id AND p.deleted_at IS NULL AND p.project_id=$4
-             AND (p.project_id=c.project_ref OR p.slug=c.project_ref)
+        AND (($4::text IS NULL AND c.project_ref IS NULL AND c.owner_id=$2 AND d.subject_id=$2) OR EXISTS (
+          SELECT 1 FROM bff_project
+           WHERE bff_project.tenant_id=c.tenant_id AND bff_project.deleted_at IS NULL AND bff_project.project_id=$4
+             AND ${projectReadPredicate}
+             AND (bff_project.project_id=c.project_ref OR (bff_project.owner_id=c.owner_id AND bff_project.slug=c.project_ref))
              AND NOT EXISTS (
-               SELECT 1 FROM bff_project other
-                WHERE other.tenant_id=c.tenant_id AND other.owner_id=c.owner_id AND other.deleted_at IS NULL
-                  AND (other.project_id=c.project_ref OR other.slug=c.project_ref) AND other.project_id<>p.project_id
+               SELECT 1 FROM bff_project other WHERE other.tenant_id=c.tenant_id AND other.deleted_at IS NULL
+                 AND (other.project_id=c.project_ref OR (other.owner_id=c.owner_id AND other.slug=c.project_ref))
+                 AND other.project_id<>bff_project.project_id
              )
         ))
       LIMIT 2 FOR SHARE OF c,m,d NOWAIT`,
@@ -100,6 +103,8 @@ export async function selectedFinalAnswerInTransaction(
 /** Bind an owner-proven legacy identity, without copying or rewriting its body. */
 export async function readRunFinalAnswer(pool: Pick<Pool, "connect">, query: RunFinalAnswerQuery): Promise<RunFinalAnswer | null> {
   return withMessageReadClient(pool, query, async (client) => {
+    const current = await readCurrentConversation(client, query.tenantId, query.subjectId, query.conversationId, undefined, false)
+    if (!current || (current.conversation.project_ref !== null && !current.projectAccess?.capabilities.includes("edit"))) return null
     const result = await client.query<FinalRow>(
       `SELECT message.parts_format_version,message.parts_public_sequence::text AS revision,message.final_segment_id,
         (SELECT jsonb_agg(CASE WHEN jsonb_typeof(item->'text')='string' AND octet_length((item-'text')::text)<=4096
@@ -110,13 +115,10 @@ export async function readRunFinalAnswer(pool: Pick<Pool, "connect">, query: Run
        JOIN bff_conversation conversation ON conversation.tenant_id=message.tenant_id AND conversation.conversation_id=message.conversation_id
        JOIN bff_agent_dispatch_outbox dispatch ON dispatch.tenant_id=message.tenant_id AND dispatch.conversation_id=message.conversation_id
          AND dispatch.assistant_message_id=message.message_id AND dispatch.run_id=message.run_id
-       WHERE message.tenant_id=$1 AND conversation.owner_id=$2 AND dispatch.subject_id=$2
+       WHERE message.tenant_id=$1 AND dispatch.subject_id=$2 AND dispatch.actor_id=$2
          AND message.conversation_id=$3 AND message.run_id=$4 AND message.role='assistant' AND message.status='completed'
          AND conversation.status='active' AND dispatch.execution_context_retired_at IS NULL
          AND message.parts_format_version=1 AND message.ordered_parts IS NOT NULL
-         AND (conversation.project_ref IS NULL OR EXISTS(SELECT 1 FROM bff_project project
-           WHERE project.tenant_id=conversation.tenant_id AND project.owner_id=conversation.owner_id AND project.deleted_at IS NULL
-             AND (project.project_id=conversation.project_ref OR project.slug=conversation.project_ref)))
        LIMIT 2`,
       [query.tenantId, query.subjectId, query.conversationId, query.runId, query.finalMessageId],
     )

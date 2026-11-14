@@ -17,4 +17,8 @@ export type ScheduledTask = {
 }
 
 /** Current rule read, separate from the immutable mutation response snapshot. */
-export type ScheduledTaskDetails = ScheduledTask & { scheduling_state: "pending" | "active" | "paused" | "exhausted" | "failed" }
+export type ScheduledTaskDetails = ScheduledTask & {
+  revision: number
+  execution_actor_id: string | null
+  scheduling_state: "pending" | "active" | "paused" | "exhausted" | "failed"
+}

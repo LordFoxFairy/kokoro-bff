@@ -9,6 +9,10 @@ export type ScheduledTaskMutationLineage = {
   idempotencyKey: string
 }
 
+export type ScheduledTaskUpdateLineage = ScheduledTaskMutationLineage & {
+  expectedRevision: number
+}
+
 export type ScheduledTaskOwnerScope = Readonly<{
   tenantId: string
   subjectId: string
@@ -37,4 +41,8 @@ export type ScheduledTaskRecord = {
   ownerId: string
 }
 
-export type ScheduledTaskReadSnapshot = Readonly<{ task: ScheduledTaskFact; deliveryStatus: ScheduledTaskOutboxStatus | null; projectAvailable: boolean }>
+export type ScheduledTaskReadSnapshot = Readonly<{
+  task: ScheduledTaskFact
+  deliveryStatus: ScheduledTaskOutboxStatus | null
+  projectAvailable: boolean
+}>

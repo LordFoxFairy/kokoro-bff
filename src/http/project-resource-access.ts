@@ -1,10 +1,14 @@
 import { ProjectResourceError } from "../application/project-resource.error.js"
 
 export type ProjectResourceProjectReader = Readonly<{
-  find(scope: Readonly<{ tenantId: string; subjectId: string }>, idOrSlug: string): Promise<unknown | null>
+  find(
+    scope: Readonly<{ tenantId: string; subjectId: string }>,
+    idOrSlug: string,
+    lifetime?: Readonly<{ signal: AbortSignal; deadlineAt: number }>,
+  ): Promise<unknown | null>
 }>
 
-/** Fresh private Project ownership; cancellation also bounds a late store response. */
+/** Fresh current Project capability; cancellation also bounds a late store response. */
 export async function currentResourceProject(
   store: ProjectResourceProjectReader | null,
   scope: Readonly<{ tenantId: string; subjectId: string }>,
@@ -20,7 +24,7 @@ export async function currentResourceProject(
     if (signal.aborted) cancel()
   })
   try {
-    const project = await Promise.race([store.find(scope, projectRef), interruption])
+    const project = await Promise.race([store.find(scope, projectRef, { signal, deadlineAt: performance.now() + 10_000 }), interruption])
     signal.throwIfAborted()
     if (project === null) throw new ProjectResourceError("project_not_found", 404)
     if (typeof project !== "object" || project === null || !("id" in project) || typeof project.id !== "string")

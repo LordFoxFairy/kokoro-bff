@@ -10,6 +10,12 @@ import { load } from "js-yaml"
 import { fromJSONSchema } from "zod"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { createServer, IncomingMessage, ServerResponse, request as httpRequest } from "node:http"
+import { Socket } from "node:net"
+import { SessionAdmissionClient } from "../src/auth/session-admission.client.ts"
+import { handleProjectPinRequest } from "../src/http/routes/project-native.ts"
+import { fixtureNativeSession } from "./doubles/iam-native-session.ts"
+import { fixtureIamCredentials, TEST_IAM_USER_CONTEXT_SECRET } from "./doubles/iam-credentials.ts"
 const spec = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
 // Compile the published envelope graph; do not introduce a competing error DTO.
 const errorEnvelope = fromJSONSchema(
@@ -148,6 +154,275 @@ test("A06 formal Projects route returns scoped websites and normalizes URLs befo
   assert.equal(writes.length, 1)
   for (const query of [...reads, ...writes]) assert.deepEqual([query.tenantId, query.subjectId, query.projectId], ["tenant", "subject", id])
 })
+
+// Source route + real HTTP peers keep iteration independent of the shared dist build.
+async function pinPeerFixture(t, options = {}) {
+  const iamCalls = [],
+    reads = []
+  const state = { allowed: true, tenant: "tenant", user: "subject", expiresAt: "2099-01-01T00:00:00.000Z", ...options.state }
+  let releasePeer
+  const peerReleased = new Promise((resolve) => {
+    releasePeer = resolve
+  })
+  let peerStarted
+  const started = new Promise((resolve) => {
+    peerStarted = resolve
+  })
+  let peerClosed
+  const cancelledPeer = new Promise((resolve) => {
+    peerClosed = resolve
+  })
+  const peer = createServer((request, response) => {
+    response.once("close", () => {
+      if (!response.writableEnded) peerClosed()
+    })
+    iamCalls.push(request.url)
+    const session = request.url.startsWith("/iam/get-session")
+    if (session) {
+      assert.equal(request.headers.cookie, headers.cookie)
+      assert.equal(request.headers.origin, headers.origin)
+    } else {
+      assert.equal(request.url, "/internal/v1/authorization/check")
+      assert.equal(request.headers.cookie, undefined)
+      assert.equal(request.headers.origin, undefined)
+      assert.equal(request.headers["x-kokoro-actor-id"], state.user)
+      assert.equal(request.headers.authorization, `Bearer ${TEST_IAM_USER_CONTEXT_SECRET}`)
+    }
+    const reply = () => {
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": request.headers["x-request-id"] })
+      const native = fixtureNativeSession(state.tenant, state.user)
+      native.session.expiresAt = state.expiresAt
+      response.end(
+        JSON.stringify(
+          session ? native : { data: { allowed: state.allowed, tenant_id: "tenant", subject_id: state.user, decision_source: "current_membership" } },
+        ),
+      )
+    }
+    if (options.delay === (session ? "session" : "membership")) {
+      peerStarted()
+      void peerReleased.then(reply)
+    } else reply()
+  })
+  const listen = async (server) => {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+    t.after(async () => {
+      server.closeAllConnections()
+      await new Promise((resolve) => server.close(resolve))
+    })
+    return `http://127.0.0.1:${server.address().port}`
+  }
+  const owner = await listen(peer)
+  t.after(() => releasePeer())
+  const credentials = await fixtureIamCredentials("tenant")
+  const admission =
+    options.admission ??
+    new SessionAdmissionClient({
+      baseUrl: owner,
+      credentialFile: credentials.iamUserContextServiceCredentialFile,
+      webOrigin: headers.origin,
+      tenantId: "tenant",
+      timeoutMs: 1000,
+      maxResponseBytes: 65536,
+    })
+  let storeStarted
+  const storeEntered = new Promise((resolve) => {
+    storeStarted = resolve
+  })
+  let releaseStore
+  const storeReleased = new Promise((resolve) => {
+    releaseStore = resolve
+  })
+  t.after(() => releaseStore())
+  const store = {
+    listPins: async (input) => {
+      reads.push(input)
+      storeStarted()
+      if (options.delay === "late-store") await storeReleased
+      if (options.delay === "store")
+        await new Promise((resolve) => {
+          if (input.signal.aborted) resolve()
+          else input.signal.addEventListener("abort", resolve, { once: true })
+        })
+      return { items: [], nextPosition: null }
+    },
+    setPin: () => assert.fail("GET must not write"),
+  }
+  const config = { tenantId: "tenant", iamWebOrigin: headers.origin, sharedSecret: "test-secret", upstreamTimeoutMs: options.timeoutMs ?? 1000 }
+  let routeFinished
+  const finished = new Promise((resolve) => {
+    routeFinished = resolve
+  })
+  const server = createServer((request, response) => {
+    void handleProjectPinRequest(request, response, config, admission, store).finally(routeFinished)
+  })
+  const base = await listen(server)
+  return { base, iamCalls, reads, state, started, storeEntered, finished, releasePeer, releaseStore, cancelledPeer }
+}
+
+test("PERF-02 pins GET uses one complete admission (two IAM HTTP reads), then rejects current revocation on the next request", async (t) => {
+  const f = await pinPeerFixture(t)
+  const result = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+  assert.equal(result.status, 200)
+  assert.deepEqual(await result.json(), { data: { items: [], next_cursor: null } })
+  assert.equal(f.iamCalls.length, 2)
+  assert.equal(f.reads.length, 1)
+  assert.equal(f.reads[0].tenantId, "tenant")
+  assert.equal(f.reads[0].subjectId, "subject")
+  f.state.allowed = false
+  const revoked = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+  assert.equal(revoked.status, 403)
+  assert.equal(f.iamCalls.length, 4)
+  assert.equal(f.reads.length, 1)
+})
+
+test("PERF-02 pins GET scopes the admitted actor and rejects a foreign current tenant before store work", async (t) => {
+  const f = await pinPeerFixture(t, { state: { user: "another-user" } })
+  assert.equal((await fetch(`${f.base}/v1/self/project-pins`, { headers })).status, 200)
+  assert.equal(f.reads[0].subjectId, "another-user")
+  f.state.tenant = "foreign"
+  assert.equal((await fetch(`${f.base}/v1/self/project-pins`, { headers })).status, 403)
+  assert.equal(f.reads.length, 1)
+})
+
+test("PERF-02 an already retired pins request or zero budget starts no IAM or store work", async (t) => {
+  for (const reason of ["request-aborted", "response-destroyed", "response-ended", "budget"])
+    await t.test(reason, async () => {
+      const request = new IncomingMessage(new Socket())
+      request.method = "GET"
+      request.url = "/v1/self/project-pins"
+      request.headers = { ...headers }
+      request.rawHeaders = Object.entries(headers).flat()
+      const response = new ServerResponse(request)
+      if (reason === "request-aborted") request.aborted = true
+      if (reason === "response-destroyed") response.destroy()
+      if (reason === "response-ended") response.end()
+      let verifies = 0
+      await handleProjectPinRequest(
+        request,
+        response,
+        { tenantId: "tenant", iamWebOrigin: headers.origin, sharedSecret: "test-secret", upstreamTimeoutMs: reason === "budget" ? 0 : 1000 },
+        {
+          verify: async () => {
+            verifies++
+            return { ok: false, status: 503, code: "iam_admission_unavailable" }
+          },
+        },
+        { listPins: () => assert.fail("retired read"), setPin: () => assert.fail("retired write") },
+      )
+      assert.equal(verifies, 0)
+    })
+})
+
+test("PERF-02 pins GET requires a real unexpired admission expiry", async (t) => {
+  for (const expiresAt of [undefined, "invalid", "2000-01-01T00:00:00.000Z"])
+    await t.test(String(expiresAt), async (t) => {
+      const f = await pinPeerFixture(t, {
+        admission: {
+          verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "subject" }, platformAdmin: false, expiresAt, setCookies: [] }),
+        },
+      })
+      const response = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+      assert.equal(response.status, expiresAt?.startsWith("2000") ? 401 : 503)
+      assert.equal(f.reads.length, 0)
+    })
+})
+
+test("PERF-02 a late admission success after the request budget starts no pins store", async (t) => {
+  let admissionSignal
+  const f = await pinPeerFixture(t, {
+    timeoutMs: 20,
+    admission: {
+      verify: async ({ signal }) => {
+        admissionSignal = signal
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        return { ok: true, identity: { namespace: "tenant", userId: "subject" }, platformAdmin: false, expiresAt: "2099-01-01T00:00:00.000Z", setCookies: [] }
+      },
+    },
+  })
+  assert.equal((await fetch(`${f.base}/v1/self/project-pins`, { headers })).status, 503)
+  assert.equal(admissionSignal.aborted, true)
+  assert.equal(f.reads.length, 0)
+})
+
+test("PERF-02 delayed IAM pins reads retire on deadline or disconnect with no late store work", { timeout: 4000 }, async (t) => {
+  for (const delay of ["session", "membership"])
+    for (const retirement of ["deadline", "disconnect"])
+      await t.test(`${delay}/${retirement}`, async (t) => {
+        const f = await pinPeerFixture(t, { delay, timeoutMs: retirement === "deadline" ? 60 : 1000 })
+        if (retirement === "deadline") {
+          const response = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+          assert.equal(response.status, 503)
+        } else {
+          const request = httpRequest(`${f.base}/v1/self/project-pins`, { headers })
+          request.on("error", () => {})
+          request.end()
+          await f.started
+          request.destroy()
+        }
+        await f.finished
+        await f.cancelledPeer
+        f.releasePeer()
+        await new Promise((resolve) => setImmediate(resolve))
+        assert.equal(f.iamCalls.length, delay === "session" ? 1 : 2)
+        assert.equal(f.reads.length, 0)
+      })
+})
+
+test("PERF-02 Session expiry during membership admission prevents a late success from starting the store", async (t) => {
+  const f = await pinPeerFixture(t, { delay: "membership", state: { expiresAt: new Date(Date.now() + 180).toISOString() } })
+  const pending = fetch(`${f.base}/v1/self/project-pins`, { headers })
+  await f.started
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, Date.parse(f.state.expiresAt) - Date.now() + 5)))
+  f.releasePeer()
+  const response = await pending
+  assert.equal(response.status, 401)
+  assert.equal(f.reads.length, 0)
+  assert.equal(f.iamCalls.length, 2)
+})
+
+test("PERF-02 a delayed pins store is aborted at the admitted Session expiry, without another IAM read or success", async (t) => {
+  const f = await pinPeerFixture(t, { delay: "store", timeoutMs: 600, state: { expiresAt: new Date(Date.now() + 180).toISOString() } })
+  const response = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+  assert.equal(response.status, 401)
+  assert.equal((await response.json()).error.code, "session_invalid")
+  assert.equal(f.iamCalls.length, 2)
+  assert.equal(f.reads.length, 1)
+  assert.equal(f.reads[0].signal.aborted, true)
+})
+
+test("PERF-02 late store success after the request budget retires cannot publish an ACK or start more IAM work", async (t) => {
+  const f = await pinPeerFixture(t, { delay: "late-store", timeoutMs: 60 })
+  const response = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+  assert.equal(response.status, 503)
+  assert.equal((await response.json()).data, undefined)
+  await f.finished
+  assert.equal(f.reads[0].signal.aborted, true)
+  f.releaseStore()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(f.reads.length, 1)
+  assert.equal(f.iamCalls.length, 2)
+})
+
+test("PERF-02 a delayed pins store retires on deadline or disconnect, without a success or further IAM read", async (t) => {
+  for (const retirement of ["deadline", "disconnect"])
+    await t.test(retirement, async (t) => {
+      const f = await pinPeerFixture(t, { delay: "store", timeoutMs: retirement === "deadline" ? 60 : 1000 })
+      if (retirement === "deadline") {
+        const response = await fetch(`${f.base}/v1/self/project-pins`, { headers })
+        assert.equal(response.status, 503)
+      } else {
+        const request = httpRequest(`${f.base}/v1/self/project-pins`, { headers })
+        request.on("error", () => {})
+        request.end()
+        await f.storeEntered
+        request.destroy()
+      }
+      await f.finished
+      assert.equal(f.reads.length, 1)
+      assert.equal(f.reads[0].signal.aborted, true)
+      assert.equal(f.iamCalls.length, 2)
+    })
+})
 test("formal bootstrap exposes scoped pin GET and naturally idempotent PUT with no command receipt", async (t) => {
   const f = await fixture(t)
   assert.equal((await f.request("/v1/self/project-pins")).status, 200)
@@ -192,6 +467,7 @@ test("a post-write Session revocation never emits a false success ACK or retries
   assert.equal(result.status, 403)
   assert.equal(result.body.data, undefined)
   assert.equal(f.calls.filter(([kind]) => kind === "write").length, 1)
+  assert.equal(f.admission.calls.length, 3)
 })
 
 test("all pin failures and initial Session denials use the canonical error envelope", async (t) => {
@@ -225,8 +501,14 @@ test("all pin failures and initial Session denials use the canonical error envel
       return result
     }
     const result = await f.request("/v1/self/project-pins")
-    check(result, status)
-    if (status === 429) assert.equal(result.headers.get("retry-after"), "7")
+    // The already admitted GET is not a cross-owner revocation barrier. The next
+    // request must perform a fresh complete admission, including current membership.
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body, { data: { items: [], next_cursor: null } })
+    const next = await f.request("/v1/self/project-pins")
+    check(next, status)
+    if (status === 429) assert.equal(next.headers.get("retry-after"), "7")
+    assert.equal(f.calls.filter(([kind]) => kind === "read").length, 1)
   }
   const unavailable = await fixture(t)
   unavailable.projects.listPins = async () => {

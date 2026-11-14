@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "94e574c68d6c972078b661fa7d917dab90c71042"
+const ownerCommit = "efe18a1f697f3ff2189e342e40ffed581bedda2b"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,7 +15,7 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36",
+  "kokoro/platform/v1/platform_runtime.proto": "c895b7f7b727f88e171b954c1d2bf932b4f7065a827ff0f892a7c6fd977b8f02",
   "kokoro/storage/v3/storage.proto": "b84a2fb1fd9c6e8c16e15a29cafbc33de670f40f703f3f33ef27652a0237a629",
   "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
@@ -48,10 +48,10 @@ const artifactDigests = {
   "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
-  "descriptor/platform-v1.binpb": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f",
+  "descriptor/platform-v1.binpb": "b1263f032cd6ac4747933b55c077bb62e928c732f014b63a480cc6342e0011da",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
-  "provenance.json": "cd5ebc24ce786b3c57bf0f42ce48abde0d7556e1fb3e44c18187589f41cc5073",
+  "provenance.json": "b9c5d9da16097023987fbd72263e22691f47fa3710f8c62d47b286642c505fad",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "085e1367f69c34edc6b80cbfb448596f36039f9857cee3bd5a407befbc295361",
   "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
@@ -79,6 +79,17 @@ const artifactDigests = {
   "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime.proto.snapshot": "1081183bae7a8377fb9f245fbc31612c88421a801f0c454a2d27702695e88409",
   "descriptor/platform-mcp-prepare-rejection-parent.platform-v1.binpb.snapshot": "89d0f77d7f775231ad0fcb3b0987fbe0f303982c5271fd9cd689633eaafd53d8",
   "descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot": "2814a928d324a529c3ad6d27c98be9e21d30584c6a0bc22795e40c98ab289fa0",
+  "execution-operations/mcp-private-server-v2.json": "5afb96d07c90b3895b1772cd6c1e564fcfd64f29e32361e82c5a97e28e48ebe4",
+  "execution-operations/mcp-private-server-request-vectors-v2.json": "d919e2d0ef0c21c931f9e99b2b60b947651e6e118f5046b82cbf132c2aceddc8",
+  "descriptor/platform-private-mcp-v2-parents.json": "6c5dfead3ed39ba3adf403d9608a70ccd12cb0291e85d97ef3ca1bd70b066bec",
+  "descriptor/platform-private-mcp-v2-proto.snapshot": "26266d24fc1fcffb581662d5a404a97c485c09e3b2e597bb88df3a9cc482ed36",
+  "descriptor/platform-private-mcp-v2-parent.binpb": "6c7dadd8ccad5a5a1b56a4c9cf17acb7a1a3f41390e8e0c011fb120dd943483f",
+  "descriptor/platform-private-mcp-v2-generated.ts.snapshot": "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d",
+  "descriptor/platform-private-mcp-v2-provenance.json.snapshot": "c0f9e23eb0e92939f8917f50722b3da759302ed22066bc0332bdd39ccf0744f8",
+  "descriptor/platform-private-mcp-v2-profile.json.snapshot": "066505d4a13cb6fd7a5f625b07eaf5f784b215db2a8584041f14da8ffc98eda1",
+  "descriptor/platform-private-mcp-v2-prisma.snapshot": "ec3e63999a77fe02019d70337b5b70916fb2ffc87ae2c0a4f52d27e6eaf7d52e",
+  "auth/bff-service-auth-v2.json": "2ed6159000461fd6869fb7134f09686be4744b920e158bc927dd584dd4762be6",
+  "execution-operations/custom-api-admin-v1.json": "e1e547004bfc10e73c00b175d556006fd888083a3ce0865c850162fca83642ab",
 }
 // Independently pinned committed publication profile; the existing broad bundle remains unchanged.
 const publicationOwnerCommit = "dd8d536a28059cbdbe0674debc47bf28d039fb47"
@@ -97,10 +108,10 @@ async function verifyPublication() {
     assert.equal(sha256(await readFile(path.join(root, publicationVendor, file))), digest, `publication artifact drifted: ${file}`)
 }
 
-const provenanceCombinedSha256 = "fe6643f9785fd92754d5b044c613ed63e4a44dfed57b0afdaf17b016b1d96e0a"
+const provenanceCombinedSha256 = "74cc73e397214e002190cb66104e2ca2e0b022fbca33f94bc25ec2543afa418b"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "dfc1410f5cf18d18d449b35b7f92499e7b08c778d8f258b80f4abec0927c9d5d",
+  sha256: "b9425907963cce44724976f95dbe25afd397442ec99c4bf97330567c185e588a",
 }
 const generatedFiles = [
   "command-receipt-errors.ts",
@@ -198,6 +209,93 @@ async function readArtifacts() {
   return Object.fromEntries(await Promise.all(Object.keys(artifactDigests).map(async (file) => [file, await readFile(path.join(root, vendorRoot, file))])))
 }
 
+// Contract build/test evidence only: restore the complete immutable predecessor
+// before the existing private/Project/Prepare proofs; never a runtime fallback.
+const customApiAdminParentCommit = "573a8f00a92991ae1e6eee6feb238e0132f71f50"
+const customApiAdminParentHashes = {
+  "contract/proto/kokoro/platform/v1/platform_runtime.proto": "7bc9253cd91a03f20e263a79be7183436497cc205d321e704e3c2338cdc8fe9c",
+  "contract/descriptor/platform-v1.binpb": "c023847f5f080311eb93273db44afc063467d9af27343c6645b7e73b3d67c731",
+  "contract/provenance.json": "2f1dc6f54d96ba8ebf7a8d37d33e8604a0b269d05000fa96efaea1f2fddfb22a",
+}
+async function verifyCustomApiAdminLeaf() {
+  const sources = await readSources(),
+    artifacts = await readArtifacts()
+  assertSourceDigests(sources)
+  assertArtifactDigests(artifacts)
+  const feature = JSON.parse(artifacts["execution-operations/custom-api-admin-v1.json"])
+  const auth = JSON.parse(artifacts["auth/bff-service-auth-v2.json"])
+  assert.equal(feature.normal_activation, false)
+  assert.equal(feature.service, "kokoro.platform.v1.CustomApiAdminService")
+  assert.deepEqual(feature.methods, [
+    "ListAdminCustomApis",
+    "GetAdminCustomApi",
+    "QuarantineAdminCustomApi",
+    "RestoreAdminCustomApi",
+    "RevokeAdminCustomApi",
+    "ListAdminCustomApiAuditEvents",
+  ])
+  assert.deepEqual(feature.states, ["active", "quarantined", "revoked"])
+  assert.equal(auth.version, "2.0.0")
+  assert.equal(auth.parent.sha256, artifactDigests["auth/bff-service-auth-v1.json"])
+  assert.equal(auth.custom_api_admin.actor, "trusted_actual_administrator_never_target_profile_owner")
+  const parents = new Map()
+  for (const [file, digest] of Object.entries(customApiAdminParentHashes)) {
+    const bytes = await readFile(path.join(root, "contract/vendor/kokoro-platform", customApiAdminParentCommit, file.slice(9)))
+    assert.equal(sha256(bytes), digest, "Custom API Admin immutable complete parent drifted")
+    parents.set(file, bytes)
+  }
+  const proto = sources["kokoro/platform/v1/platform_runtime.proto"].toString("utf8")
+  const marker = "\n// B13 Custom API governance: tenant-scoped safe administration, never personal secret access.\n"
+  assert.equal(proto.split(marker).length, 2)
+  const field = "  string governance_status = 9;\n"
+  const prefix = proto.slice(0, proto.indexOf(marker))
+  assert.equal(prefix.split(field).length, 2)
+  assert.deepEqual(Buffer.from(prefix.replace(field, "")), parents.get("contract/proto/kokoro/platform/v1/platform_runtime.proto"))
+  const additions = [...proto.slice(proto.indexOf(marker)).matchAll(/message (\w+) /gu)].map((value) => value[1])
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const graph = fromBinary(FileDescriptorSetSchema, artifacts["descriptor/platform-v1.binpb"])
+  const targets = graph.file.filter((file) => file.name === "kokoro/platform/v1/platform_runtime.proto")
+  assert.equal(targets.length, 1)
+  const target = targets[0]
+  assert.deepEqual(
+    target.messageType.slice(-additions.length).map((value) => value.name),
+    additions,
+  )
+  target.messageType.splice(-additions.length)
+  const services = target.service.filter((value) => value.name === "CustomApiAdminService")
+  assert.equal(services.length, 1)
+  assert.deepEqual(
+    services[0].method.map((value) => value.name),
+    feature.methods,
+  )
+  target.service = target.service.filter((value) => value.name !== "CustomApiAdminService")
+  const profile = target.messageType.find((value) => value.name === "PersonalCustomApi")
+  assert.ok(profile)
+  const governance = profile.field.filter((value) => value.name === "governance_status")
+  assert.equal(governance.length, 1)
+  assert.equal(governance[0].number, 9)
+  assert.equal(governance[0].type, 9)
+  profile.field = profile.field.filter((value) => value.name !== "governance_status")
+  assert.deepEqual(Buffer.from(toBinary(FileDescriptorSetSchema, graph)), parents.get("contract/descriptor/platform-v1.binpb"))
+  const prior = JSON.parse(parents.get("contract/provenance.json"))
+  const current = JSON.parse(artifacts["provenance.json"])
+  assert.equal(prior.combinedSha256, "f39c8f19a3b9f153ea2e68fa451d6f7a11c72488861aee0b8b33aba88661e0f3")
+  assert.deepEqual(current.files, [...prior.files, "execution-operations/custom-api-admin-v1.json", "auth/bff-service-auth-v2.json"])
+  // These are the pinned derived publication identities, not a re-signing of old inputs.
+  const inverse = { ...current, files: prior.files, combinedSha256: prior.combinedSha256, serviceCredentialSources: prior.serviceCredentialSources }
+  assert.deepEqual(Buffer.from(JSON.stringify(inverse, null, 2) + "\n"), parents.get("contract/provenance.json"))
+  return parents
+}
+async function restoreCustomApiAdminArtifact(file, supplied) {
+  assert.ok(Object.hasOwn(customApiAdminParentHashes, file), "Custom API Admin unsupported predecessor input")
+  const sources = await readSources(),
+    artifacts = await readArtifacts()
+  const current = file.endsWith(".proto") ? sources[file.slice("contract/proto/".length)] : artifacts[file.slice(9)]
+  assert.deepEqual(supplied ?? current, current)
+  return Buffer.from((await verifyCustomApiAdminLeaf()).get(file))
+}
+
 async function verifyInputs() {
   assert.deepEqual(
     JSON.parse(await readFile(path.join(root, "buf.platform.json"), "utf8")),
@@ -210,6 +308,7 @@ async function verifyInputs() {
   assertSourceDigests(await readSources())
   assertArtifactDigests(await readArtifacts())
   assertVendorLayout(await tree(path.join(root, vendorRoot)))
+  await verifyCustomApiAdminLeaf()
 }
 
 async function generate(directory) {
@@ -271,6 +370,8 @@ async function manifestFor(directory) {
         },
         { path: "contract/errors/command-receipt-v1.json", sha256: artifactDigests["errors/command-receipt-v1.json"] },
         { path: "contract/auth/bff-service-auth-v1.json", sha256: artifactDigests["auth/bff-service-auth-v1.json"] },
+        { path: "contract/auth/bff-service-auth-v2.json", sha256: artifactDigests["auth/bff-service-auth-v2.json"] },
+        { path: "contract/execution-operations/custom-api-admin-v1.json", sha256: artifactDigests["execution-operations/custom-api-admin-v1.json"] },
         {
           path: "contract/execution-operations/skill-installation-update-v1.json",
           sha256: artifactDigests["execution-operations/skill-installation-update-v1.json"],
@@ -417,6 +518,27 @@ async function manifestFor(directory) {
           path: "contract/descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot",
           sha256: artifactDigests["descriptor/platform-mcp-prepare-rejection-parent.platform_runtime_pb.ts.snapshot"],
         },
+        { path: "contract/execution-operations/mcp-private-server-v2.json", sha256: artifactDigests["execution-operations/mcp-private-server-v2.json"] },
+        {
+          path: "contract/execution-operations/mcp-private-server-request-vectors-v2.json",
+          sha256: artifactDigests["execution-operations/mcp-private-server-request-vectors-v2.json"],
+        },
+        { path: "contract/descriptor/platform-private-mcp-v2-parents.json", sha256: artifactDigests["descriptor/platform-private-mcp-v2-parents.json"] },
+        { path: "contract/descriptor/platform-private-mcp-v2-proto.snapshot", sha256: artifactDigests["descriptor/platform-private-mcp-v2-proto.snapshot"] },
+        { path: "contract/descriptor/platform-private-mcp-v2-parent.binpb", sha256: artifactDigests["descriptor/platform-private-mcp-v2-parent.binpb"] },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-generated.ts.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-generated.ts.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-provenance.json.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-provenance.json.snapshot"],
+        },
+        {
+          path: "contract/descriptor/platform-private-mcp-v2-profile.json.snapshot",
+          sha256: artifactDigests["descriptor/platform-private-mcp-v2-profile.json.snapshot"],
+        },
+        { path: "contract/descriptor/platform-private-mcp-v2-prisma.snapshot", sha256: artifactDigests["descriptor/platform-private-mcp-v2-prisma.snapshot"] },
       ],
       provenance: {
         path: "contract/provenance.json",
@@ -482,6 +604,7 @@ async function main() {
 }
 
 export {
+  restoreCustomApiAdminArtifact,
   artifactDigests,
   assertArtifactDigests,
   assertGeneratedTree,

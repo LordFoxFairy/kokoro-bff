@@ -186,7 +186,8 @@ test("DELETE rechecks current ownership before every replay and never substitute
   const calls = []
   const store = {
     projectService: {
-      find: async (scope, id) => (owned && scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && id === "slug" ? { id: "project-1" } : null),
+      find: async (scope, id) =>
+        owned && scope.tenantId === "tenant-1" && scope.subjectId === "subject-1" && ["slug", "project-1"].includes(id) ? { id: "project-1" } : null,
     },
   }
   const factory = (_cfg, scope) => ({

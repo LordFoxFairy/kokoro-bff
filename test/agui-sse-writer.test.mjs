@@ -182,3 +182,134 @@ describe("AG-UI SSE writer", () => {
     assert.equal(response.writes.length, 0)
   })
 })
+
+it("one cached Project ledger changes from sender-private to reader-safe and rejects a revoked reader before sending", async () => {
+  const { liveAgentSessionEvents } = await import("../src/http/routes/agent.ts")
+  const { AgUiReplayCoordinator } = await import("../src/application/agui/session-runtime.ts")
+  let loads = 0
+  const metadata = {
+    kokoro: { event_id: "event", seq: 1, session_id: "session_1", run_id: "run_1", timestamp: "2026-11-13T00:00:00.000Z", public_sequence: "1" },
+  }
+  const page = {
+    kind: "page",
+    atHead: true,
+    terminalRunId: "run_1",
+    frames: [
+      {
+        publicSequence: 1,
+        cursor: "agui_" + "1".repeat(32),
+        eventType: "TEXT_MESSAGE_CONTENT",
+        sourceSubjectId: "sender",
+        payload: { type: "TEXT_MESSAGE_CONTENT", messageId: "private", delta: "peer-private-trace", metadata },
+      },
+      {
+        publicSequence: 2,
+        cursor: "agui_" + "2".repeat(32),
+        eventType: "RUN_FINISHED",
+        sourceSubjectId: "sender",
+        payload: {
+          type: "RUN_FINISHED",
+          threadId: "session_1",
+          runId: "run_1",
+          status: "completed",
+          outcome: { type: "success" },
+          usage: [{ private_funds: "private-funds" }],
+          metadata: { kokoro: { ...metadata.kokoro, public_sequence: "2" } },
+        },
+      },
+    ],
+  }
+  const runtime = {
+    connections: { acquire: () => ({ release() {} }), sessionCount: () => 0 },
+    replays: new AgUiReplayCoordinator({ cacheTtlMs: 60000 }),
+    ledgerWaits: { clear() {} },
+  }
+  const projection = {
+    replay: async () => {
+      loads++
+      return page
+    },
+  }
+  const invoke = async (subject, allowed) => {
+    const request = Object.assign(new EventEmitter(), { headers: {}, aborted: false })
+    const response = Object.assign(new EventEmitter(), {
+      headersSent: false,
+      writableEnded: false,
+      destroyed: false,
+      writes: [],
+      statusCode: 200,
+      setHeader() {},
+      writeHead(status) {
+        this.statusCode = status
+        this.headersSent = true
+      },
+      write(chunk) {
+        this.writes.push(String(chunk))
+        return true
+      },
+      end(chunk) {
+        if (chunk) this.writes.push(String(chunk))
+        this.writableEnded = true
+      },
+    })
+    await liveAgentSessionEvents(
+      request,
+      response,
+      { agUi: { streamMaxFrames: 10, streamMaxBytes: 65536, streamMaxDurationMs: 1000, replayPageFrames: 10, replayPageBytes: 65536 } },
+      { requestId: "request", identity: { namespace: "tenant", userId: subject } },
+      "session_1",
+      projection,
+      true,
+      runtime,
+      new AbortController().signal,
+      { sharedProject: true, authorize: async () => (allowed ? { ok: true, canEdit: true } : false) },
+    )
+    return { status: response.statusCode, body: response.writes.join("") }
+  }
+  assert.match((await invoke("sender", true)).body, /peer-private-trace/u)
+  const reader = await invoke("reader", true)
+  assert.equal(reader.status, 200)
+  assert.doesNotMatch(reader.body, /peer-private-trace|private-funds|TEXT_MESSAGE_CONTENT/u)
+  assert.match(reader.body, /RUN_FINISHED/u)
+  const revoked = await invoke("reader", false)
+  assert.equal(revoked.status, 404)
+  assert.doesNotMatch(revoked.body, /RUN_FINISHED|peer-private-trace/u)
+  assert.equal(page.frames[0].payload.metadata.kokoro.can_control, undefined, "per-reader projection never mutates cached source bytes")
+  assert.equal(loads, 1, "cached bytes are never cached authorization or reader-specific projection")
+})
+
+it("safe peer ERROR retains the verified owner failure profile and current read-only fact without the private diagnostic", async () => {
+  const { projectReaderAgUiFrames } = await import("../src/application/agui/project-session-events.ts")
+  const { projectChatEvent, createAgUiProjectionState } = await import("../src/application/agui/project-chat-event.ts")
+  const [payload] = projectChatEvent(
+    {
+      event_id: "error",
+      seq: 1,
+      session_id: "session",
+      run_id: "run",
+      timestamp: "2026-11-13T00:00:00.000Z",
+      kind: "run.failed",
+      payload: { failure: { source: "agent", code: "model_unavailable", retryable: true }, message: "private diagnostic" },
+    },
+    createAgUiProjectionState(),
+  )
+  const input = {
+    publicSequence: 1,
+    cursor: "agui_" + "1".repeat(32),
+    eventType: "RUN_ERROR",
+    sourceSubjectId: "sender",
+    payload: { ...payload, metadata: { kokoro: { ...payload.metadata.kokoro, public_sequence: "1" } } },
+  }
+  const [result] = projectReaderAgUiFrames([input], "reader", true)
+  assert.deepEqual(result.payload.metadata.kokoro.failure, { source: "agent", code: "model_unavailable", retryable: true })
+  assert.equal(result.payload.metadata.kokoro.can_control, false)
+  assert.equal(result.payload.code, "model_unavailable")
+  assert.equal(result.payload.message, "Agent run failed")
+  assert.equal(result.payload.threadId, "session")
+  assert.equal(result.payload.runId, "run")
+  const downgrade = projectReaderAgUiFrames([input], "sender", false)
+  assert.equal(downgrade[0].payload.metadata.kokoro.can_control, false)
+  assert.throws(() => projectReaderAgUiFrames([{ ...input, payload: { ...input.payload, code: "unverified" } }], "reader", true), {
+    name: "AgUiSourceContractError",
+  })
+})

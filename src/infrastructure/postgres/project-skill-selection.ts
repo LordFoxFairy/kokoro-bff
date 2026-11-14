@@ -1,3 +1,4 @@
+import { projectReadPredicate } from "./project-access.js"
 import { createHash } from "node:crypto"
 import type { ProjectOwnerScope, ProjectSkillSelection } from "../../application/projects/types.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
@@ -6,8 +7,11 @@ import { replaceProjectSkillSelection } from "./project-rename.js"
 
 export function createProjectSkillSelectionOperations(database: PostgresBffDatabase) {
   async function skillSelection(scope: ProjectOwnerScope, projectId: string): Promise<ProjectSkillSelection | null> {
-    const result = await database.pool.query<{ project_id: string; selected_skill_installation_ids: string[] }>(
-      `SELECT project_id, selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+    const result = await database.pool.query<{
+      project_id: string
+      selected_skill_installation_ids: string[]
+    }>(
+      `SELECT project_id, selected_skill_installation_ids FROM bff_project WHERE tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectReadPredicate}`,
       [scope.tenantId, scope.subjectId, projectId],
     )
     const row = result.rows[0]

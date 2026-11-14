@@ -60,6 +60,26 @@ CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
   ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
   WHERE deleted_at IS NULL;
 
+-- PROJECT-GRANT-SQL-BEGIN
+ALTER TABLE bff_project ADD COLUMN IF NOT EXISTS access_version BIGINT NOT NULL DEFAULT 1
+  CONSTRAINT ck_bff_project_access_version CHECK (access_version >= 1);
+
+CREATE TABLE IF NOT EXISTS bff_project_grant (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  grant_role TEXT NOT NULL CONSTRAINT ck_bff_project_grant_role CHECK (grant_role IN ('viewer', 'editor')),
+  expires_at TIMESTAMPTZ(3),
+  revoked_at TIMESTAMPTZ(3),
+  granted_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, project_id, subject_id)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_project_grant_subject
+  ON bff_project_grant (tenant_id, subject_id, project_id) WHERE revoked_at IS NULL;
+-- PROJECT-GRANT-SQL-END
+
 -- PROJECT-PIN-SQL-BEGIN
 CREATE TABLE IF NOT EXISTS bff_project_pin (
   tenant_id TEXT NOT NULL,
@@ -574,6 +594,19 @@ CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_lease
   WHERE status='leased';
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_agent_dispatch_head
   ON bff_scheduled_agent_dispatch (tenant_id,task_id,occurrence_order_key,dispatch_id);
+
+-- PROJECT-SCHEDULED-EXECUTION-SQL-BEGIN
+ALTER TABLE bff_scheduled_task ADD COLUMN IF NOT EXISTS execution_actor_id TEXT;
+ALTER TABLE bff_scheduled_task ADD CONSTRAINT ck_bff_scheduled_task_executor CHECK (
+  (NOT enabled OR (execution_actor_id IS NOT NULL))
+  AND (execution_actor_id IS NULL OR execution_actor_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$')
+);
+ALTER TABLE bff_scheduled_agent_dispatch ADD COLUMN IF NOT EXISTS task_revision BIGINT NOT NULL
+  CONSTRAINT ck_bff_scheduled_agent_dispatch_revision CHECK (task_revision >= 1 AND task_revision <= 9007199254740991);
+ALTER TABLE bff_scheduled_task_outbox DROP CONSTRAINT uq_bff_scheduled_task_outbox_business;
+ALTER TABLE bff_scheduled_task_outbox ADD CONSTRAINT uq_bff_scheduled_task_outbox_business
+  UNIQUE (tenant_id, task_id, command_type, actor_id, idempotency_key);
+-- PROJECT-SCHEDULED-EXECUTION-SQL-END
 
 -- A deleted conversation must compensate every launch that may already have
 -- crossed the Agent boundary. These run.cancel commands are committed in the
@@ -1094,3 +1127,37 @@ CREATE TABLE IF NOT EXISTS bff_personal_knowledge_usage (
   CONSTRAINT pk_bff_personal_knowledge_usage PRIMARY KEY (tenant_id, owner_id),
   CONSTRAINT ck_bff_knowledge_usage_scope CHECK (tenant_id <> '' AND owner_id <> '')
 );
+
+-- PROJECT-AGUI-SOURCE-SQL-BEGIN
+-- One public Conversation stream; independent durable cursors for real Agent user namespaces.
+CREATE TABLE IF NOT EXISTS bff_agui_source_cursor (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  source_owner TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  source_high_watermark BIGINT NOT NULL DEFAULT 0,
+  projection_state JSONB NOT NULL DEFAULT '{"text_message_ids":[]}'::jsonb,
+  CONSTRAINT pk_bff_agui_source_cursor PRIMARY KEY (tenant_id,session_id,source_owner,subject_id),
+  CONSTRAINT ck_bff_agui_source_cursor_identity CHECK (
+    length(btrim(tenant_id))>0 AND length(btrim(session_id))>0 AND length(btrim(subject_id))>0 AND source_owner='kokoro-agent'
+  ),
+  CONSTRAINT ck_bff_agui_source_cursor_watermark CHECK (source_high_watermark>=0),
+  CONSTRAINT ck_bff_agui_source_cursor_state CHECK (jsonb_typeof(projection_state)='object')
+);
+ALTER TABLE bff_agui_stream DROP COLUMN source_high_watermark, DROP COLUMN projection_state;
+ALTER TABLE bff_agui_source_event ADD COLUMN source_subject_id TEXT NOT NULL
+  CONSTRAINT ck_bff_agui_source_event_subject CHECK (length(btrim(source_subject_id))>0);
+ALTER TABLE bff_agui_source_event DROP CONSTRAINT pk_bff_agui_source_event, DROP CONSTRAINT uq_bff_agui_source_event_sequence;
+ALTER TABLE bff_agui_source_event ADD CONSTRAINT pk_bff_agui_source_event PRIMARY KEY (tenant_id,session_id,source_owner,source_subject_id,source_event_id),
+  ADD CONSTRAINT uq_bff_agui_source_event_sequence UNIQUE (tenant_id,session_id,source_owner,source_subject_id,source_sequence);
+ALTER TABLE bff_agui_event ADD COLUMN source_subject_id TEXT NOT NULL
+  CONSTRAINT ck_bff_agui_event_subject CHECK (length(btrim(source_subject_id))>0);
+ALTER TABLE bff_agui_event DROP CONSTRAINT uq_bff_agui_event_source_frame;
+ALTER TABLE bff_agui_event ADD CONSTRAINT uq_bff_agui_event_source_frame UNIQUE (tenant_id,session_id,source_owner,source_subject_id,source_event_id,frame_index);
+ALTER TABLE bff_conversation_artifact ADD COLUMN source_subject_id TEXT NOT NULL
+  CONSTRAINT ck_bff_conversation_artifact_subject CHECK (length(btrim(source_subject_id))>0);
+ALTER TABLE bff_conversation_artifact DROP CONSTRAINT uq_bff_conversation_artifact_source;
+ALTER TABLE bff_conversation_artifact ADD CONSTRAINT uq_bff_conversation_artifact_source UNIQUE (tenant_id,conversation_id,source_owner,source_subject_id,source_event_id);
+ALTER TABLE bff_agent_dispatch_outbox DROP CONSTRAINT uq_bff_agent_dispatch_business;
+ALTER TABLE bff_agent_dispatch_outbox ADD CONSTRAINT uq_bff_agent_dispatch_business UNIQUE (tenant_id,conversation_id,actor_id,idempotency_key);
+-- PROJECT-AGUI-SOURCE-SQL-END

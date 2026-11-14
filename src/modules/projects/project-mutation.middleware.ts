@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_IDEMPOTENCY, PROJECT_LOOKUP, PROJECT_MUTATIONS, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_IDEMPOTENCY, PROJECT_EDIT_LOOKUP, PROJECT_READ_LOOKUP, PROJECT_MUTATIONS, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectLookup } from "../../application/projects/types.js"
@@ -22,9 +22,11 @@ export class ProjectMutationMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
+    @Inject(PROJECT_EDIT_LOOKUP) private readonly lookup: ProjectLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly readLookup: ProjectLookup,
     @Inject(PROJECT_MUTATIONS) private readonly mutations: ProjectMutationStore,
-    @Inject(PROJECT_IDEMPOTENCY) private readonly persistent: IdempotencyRepository,
+    @Inject(PROJECT_IDEMPOTENCY)
+    private readonly persistent: IdempotencyRepository,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
@@ -76,7 +78,13 @@ export class ProjectMutationMiddleware implements NestMiddleware {
         const project = await this.lookup.find({ tenantId, subjectId }, route.projectId)
         if (abort.signal.aborted) return
         if (project === null) {
-          send(response, 404, failure("project_not_found", "Project was not found", id))
+          const visible = await this.readLookup.find({ tenantId, subjectId }, route.projectId)
+          if (abort.signal.aborted) return
+          send(
+            response,
+            visible === null ? 404 : 403,
+            failure(visible === null ? "project_not_found" : "project_edit_forbidden", "Project cannot be edited", id),
+          )
           return
         }
       }

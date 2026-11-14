@@ -124,7 +124,7 @@ export async function runDisplayRoute(
           deadlineAt,
         }),
       )
-      if (!owned) throw Error("run_display_not_found")
+      if (!owned || (owned.projectRef !== null && !owned.projectAccess?.capabilities.includes("edit"))) throw Error("run_display_not_found")
     }
     // The enclosing handler just admitted the user. Repeat that admission
     // after owner I/O, not twice in a row before the first read.

@@ -588,6 +588,7 @@ describe("AG-UI source continuity defense", () => {
   it("rejects a source sequence that skips the committed high watermark", async () => {
     const repository = {
       readStream: async () => ({
+        sourceSubjectId: "user_1",
         version: 0,
         sourceHighWatermark: 0,
         projectionState: { textMessageIds: [] },
@@ -605,6 +606,7 @@ describe("AG-UI source continuity defense", () => {
   it("rejects a backward source batch instead of sorting it into validity", async () => {
     const repository = {
       readStream: async () => ({
+        sourceSubjectId: "user_1",
         version: 0,
         sourceHighWatermark: 0,
         projectionState: { textMessageIds: [] },
@@ -622,7 +624,7 @@ describe("AG-UI source continuity defense", () => {
   it("projects only a complete typed Artifact delivery claim", async () => {
     let committed
     const repository = {
-      readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] } }),
+      readStream: async () => ({ sourceSubjectId: "user_1", version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] } }),
       assertPersistedSources: async () => undefined,
       commitProjection: async (command) => {
         committed = command

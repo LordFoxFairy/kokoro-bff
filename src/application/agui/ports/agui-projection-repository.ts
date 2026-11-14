@@ -8,6 +8,7 @@ export type AgUiProjectionStateSnapshot = {
 }
 
 export type AgUiStreamState = {
+  sourceSubjectId: string | null
   version: number
   sourceHighWatermark: number
   projectionState: AgUiProjectionStateSnapshot
@@ -62,6 +63,7 @@ export type AgUiSourceProjection = {
 export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery" | "interactionState" | "skillUsageFact">
 
 export type CommitAgUiProjection = {
+  sourceSubjectId: string
   tenantId: string
   sessionId: string
   expectedVersion: number
@@ -74,6 +76,7 @@ export type CommitAgUiProjection = {
 }
 
 export type StoredAgUiFrame = {
+  sourceSubjectId: string
   publicSequence: number
   cursor: string
   eventType: string
@@ -153,8 +156,8 @@ export interface AgUiProjectionConsumerRepository {
 }
 
 export interface AgUiProjectionRepository {
-  readStream(tenantId: string, sessionId: string): Promise<AgUiStreamState>
-  assertPersistedSources(tenantId: string, sessionId: string, sources: readonly AgUiSourceIdentity[]): Promise<void>
+  readStream(tenantId: string, sessionId: string, subjectId?: string): Promise<AgUiStreamState>
+  assertPersistedSources(tenantId: string, sessionId: string, sources: readonly AgUiSourceIdentity[], subjectId: string): Promise<void>
   commitProjection(command: CommitAgUiProjection): Promise<{ kind: "committed"; insertedFrames: number } | "version_conflict" | "lease_conflict">
   replay(
     tenantId: string,

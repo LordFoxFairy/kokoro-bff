@@ -6,7 +6,7 @@ import {
   APP_SKILL_BINDING_CLIENT,
   BFF_CONFIG,
   BFF_DATABASE,
-  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
   SESSION_ADMISSION,
   SKILL_INSTALLATION_CLIENT,
   SKILL_LIST_ADMISSION,
@@ -329,11 +329,11 @@ async function ownerFixture(t, principal, fresh = { ok: true, principal }) {
     config,
     (builder) =>
       builder
-        .overrideProvider(PROJECT_LOOKUP)
+        .overrideProvider(PROJECT_READ_LOOKUP)
         .useValue({
           find: async (scope, id) => {
             calls.push(["project", scope.tenantId, scope.subjectId, id])
-            return ["project-slug", "project-id"].includes(id) ? { id: "project-id" } : null
+            return id === "project-id" ? { id: "project-id" } : null
           },
         })
         .overrideProvider(APP_SKILL_BINDING_CLIENT)
@@ -386,20 +386,20 @@ async function ownerFixture(t, principal, fresh = { ok: true, principal }) {
 }
 
 const admitted = ["verify"]
-const projectLookup = ["project", tenant, subject, "project-slug"]
+const projectLookup = ["project", tenant, subject, "project-id"]
 const personalInstallations = ["installations", tenant, subject, null]
 const projectInstallations = ["installations", tenant, subject, "project-id"]
 const projectRecheck = ["project", tenant, subject, "project-id"]
 const appBindings = ["app-bindings", tenant, subject, appId, { limit: 100 }]
 
-test("SkillsModule public project list resolves the slug, reads canonical project installs and rechecks that project", async (t) => {
+test("SkillsModule public project list qualifies the canonical Project, reads its installs and rechecks access", async (t) => {
   for (const [name, principal, appReads, data] of [
     ["API key", ownerKey, [], []],
     ["trusted Open App", trusted, [appBindings], [boundRow]],
   ]) {
     await t.test(name, async (t) => {
       const f = await ownerFixture(t, principal)
-      const { status, body } = await f.list("?project_id=project-slug")
+      const { status, body } = await f.list("?project_id=project-id")
       assert.equal(status, 200, JSON.stringify(body))
       assert.deepEqual(body, { ok: true, request_id: requestId, data })
       assert.deepEqual(f.calls, [admitted, projectLookup, ...appReads, personalInstallations, projectInstallations, projectRecheck, admitted])

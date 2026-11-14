@@ -339,7 +339,8 @@ describe("Agent dispatch HTTP classification", () => {
 
 it("freezes ordered Skill selection in v3 payload and digest, rejecting old durable payloads", async () => {
   const { agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
-  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../dist/application/chat/agent-dispatch-payload.js")
+  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload } =
+    await import("../dist/application/chat/agent-dispatch-payload.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -976,4 +977,46 @@ it("reserves ordered final-answer intent for commit without requiring the Storag
   await resolver.submit({ ...input, selectedResourceRefs: mixed })
   assert.deepEqual(repository.commits[1]?.resourceSelection, { projectId: null, refs: mixed })
   assert.deepEqual(repository.commits[1]?.payload.launch.selected_resource_refs, [canonical])
+})
+
+it("shared context survives the original frozen dispatch and saved-wire projections but rejects scope drift and null", async () => {
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload } = await import("../src/application/chat/agent-dispatch-payload.ts")
+  const { projectSavedAgentLaunch } = await import("../src/infrastructure/clients/agent/http-wire.ts")
+  const payload = buildAgentDispatchPayload(
+    {
+      tenantId: "tenant",
+      subjectId: "editor",
+      actorId: "editor",
+      conversationId: "conversation",
+      requestId: "request",
+      idempotencyKey: "key",
+      content: "new user input",
+    },
+    { runId: "run", userMessageId: "user" },
+  )
+  const context = {
+    project_ref: "project",
+    conversation_id: "conversation",
+    messages: [{ message_id: "previous", sequence: "1", role: "user" as const, content: " literal " }],
+    has_earlier_messages: false,
+  }
+  const frozen = {
+    ...payload,
+    launch: {
+      ...payload.launch,
+      project_ref: "project",
+      trace: { source: "kokoro-bff" as const, project_ref: "project" },
+      shared_conversation_context: context,
+    },
+  }
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(frozen))), frozen)
+  const { project_ref: _project, ...saved } = frozen.launch
+  assert.deepEqual(projectSavedAgentLaunch(saved)?.shared_conversation_context, context)
+  assert.equal(projectSavedAgentLaunch({ ...saved, shared_conversation_context: null }), null)
+  assert.equal(projectSavedAgentLaunch({ ...saved, shared_conversation_context: { ...context, conversation_id: "other" } }), null)
+  assert.throws(
+    () => parseAgentDispatchPayload({ ...frozen, launch: { ...frozen.launch, shared_conversation_context: { ...context, project_ref: "other" } } }),
+    /PAYLOAD_INVALID/u,
+  )
+  assert.equal(Object.hasOwn(parseAgentDispatchPayload(payload).launch, "shared_conversation_context"), false)
 })

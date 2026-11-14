@@ -139,7 +139,7 @@ const lineage = {
 
 function command(attemptCount = 1): ScheduledTaskOutboxCommand {
   return {
-    outboxId: scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
+    outboxId: scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture", "actor_fixture"),
     tenantId: "tenant_fixture",
     taskId: "scheduled_fixture",
     commandType: "scheduler.replace",
@@ -236,12 +236,12 @@ describe("ScheduledTask durable outbox", () => {
     const internal = scheduledTaskOutboxTaskFromPayload(payload.task)
     assert.equal(Object.hasOwn(internal, "recurrenceAnchorAt"), false)
     assert.equal(
-      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
-      "scheduled_outbox_a9418ff083b15fea19f73ac7c64a3f52",
+      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture", "actor_fixture"),
+      "scheduled_outbox_3f3af18a36b8d51be115d98e2491dc5a",
     )
     assert.notEqual(
-      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "other-key"),
-      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
+      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "other-key", "actor_fixture"),
+      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture", "actor_fixture"),
     )
   })
 
@@ -349,4 +349,9 @@ describe("ScheduledTask durable outbox", () => {
       await new Promise<void>((resolve) => owner.close(() => resolve()))
     }
   })
+})
+it("new scheduled command identity separates two real actors using the same resource key", () => {
+  const first = scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "same-key", "first-actor")
+  const second = scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "same-key", "second-actor")
+  assert.notEqual(first, second)
 })

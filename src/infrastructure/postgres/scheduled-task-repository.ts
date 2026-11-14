@@ -1,3 +1,6 @@
+import { retireUnsentScheduledDefinition } from "./scheduled-definition-fence.js"
+import { lockProjectForEdit, projectReadPredicate, projectEditPredicate } from "./project-access.js"
+import { scheduledExecutionBinding } from "../../domain/scheduled-task/execution-binding.js"
 import { calendarFromWire, calendarWire, freezeCalendar, type ScheduledCalendar, type ScheduledTaskFrequency } from "../../domain/scheduled-task/calendar.js"
 import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
@@ -15,11 +18,12 @@ import {
   type ScheduledTaskOutboxStatus,
   type ScheduledTaskOutboxTask,
 } from "../../domain/scheduled-task/outbox.js"
-import { utcDate, type ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
+import { utcDate, type ScheduledTaskFact, type ScheduledTaskMutationSnapshot } from "../../domain/scheduled-task/task.js"
 import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/scheduled/scheduled-task-outbox-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskMutationLineage,
+  ScheduledTaskUpdateLineage,
   ScheduledTaskOwnerScope,
   ScheduledTaskPatch,
   ScheduledTaskRecord,
@@ -33,6 +37,7 @@ type ScheduledTaskRow = {
   tenant_id: string
   project_id: string | null
   owner_id: string
+  execution_actor_id: string | null
   title: string
   prompt: string
   frequency: ScheduledTaskFrequency
@@ -79,7 +84,7 @@ type ScheduledTaskProjectRow = {
   deleted_at: Date | string | null
 }
 
-const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
+const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, execution_actor_id, title, prompt, frequency, task_time, timezone,
               weekdays, month_days, to_char(local_date, 'YYYY-MM-DD') AS local_date, run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
 
 function dbDate(value: Date | string, errorCode: string): Date {
@@ -96,16 +101,27 @@ function safeInteger(value: string | number, label: string): number {
 function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
   return {
     id: row.task_id,
+    ownerId: row.owner_id,
+    executionActorId: row.execution_actor_id,
     ...(row.project_id === null ? {} : { projectId: row.project_id }),
     title: row.title,
     prompt: row.prompt,
     ...storedCalendar(row),
-    ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
+    ...(row.expires_at === null
+      ? {}
+      : {
+          expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID"),
+        }),
     autoApprove: row.auto_approve,
     enabled: row.enabled,
     status: row.status,
     revision: safeInteger(row.revision, "SCHEDULED_TASK_REVISION"),
   }
+}
+
+function scheduledTaskMutationFromRow(row: ScheduledTaskRow): ScheduledTaskMutationSnapshot {
+  const { ownerId: _ownerId, executionActorId: _executionActorId, ...snapshot } = scheduledTaskFromRow(row)
+  return snapshot
 }
 
 function storedCalendar(row: ScheduledTaskRow): ScheduledCalendar {
@@ -118,7 +134,10 @@ function storedCalendar(row: ScheduledTaskRow): ScheduledCalendar {
     ...(row.local_date === null ? {} : { local_date: row.local_date }),
   })
   if (calendar === null || (row.frequency === "once") !== (row.run_at !== null)) throw new Error("SCHEDULED_TASK_CALENDAR_INVALID")
-  return { ...calendar, ...(row.run_at === null ? {} : { runAt: dbDate(row.run_at, "SCHEDULED_TASK_RUN_AT_INVALID") }) }
+  return {
+    ...calendar,
+    ...(row.run_at === null ? {} : { runAt: dbDate(row.run_at, "SCHEDULED_TASK_RUN_AT_INVALID") }),
+  }
 }
 
 function newCalendar(input: ScheduledCalendar, now: Date, currentRunAt?: Date): ScheduledCalendar {
@@ -131,7 +150,7 @@ function newCalendar(input: ScheduledCalendar, now: Date, currentRunAt?: Date): 
 }
 
 function outboxTaskFromRow(row: ScheduledTaskRow): ScheduledTaskOutboxTask {
-  const { id, ...task } = scheduledTaskFromRow(row)
+  const { id, ...task } = scheduledTaskMutationFromRow(row)
   return { ...task, taskId: id, ownerId: row.owner_id }
 }
 
@@ -147,7 +166,7 @@ async function insertScheduledTaskOutbox(
       (outbox_id,tenant_id,task_id,command_type,aggregate_revision,payload,actor_id,request_id,idempotency_key,status,attempt_count,available_at,fence)
      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,'pending',0,CURRENT_TIMESTAMP(3),0)`,
     [
-      scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey),
+      scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey, lineage.actorId),
       row.tenant_id,
       row.task_id,
       commandType(operation),
@@ -169,20 +188,26 @@ export async function pauseProjectScheduledTasks(
   deletionKey: string,
 ): Promise<void> {
   const tasks = await client.query<ScheduledTaskRow>(
-    `SELECT ${TASK_COLUMNS} FROM bff_scheduled_task WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 ORDER BY task_id FOR UPDATE`,
-    [scope.tenantId, scope.subjectId, projectId],
+    `SELECT ${TASK_COLUMNS} FROM bff_scheduled_task WHERE tenant_id=$1 AND project_id=$2 ORDER BY task_id FOR UPDATE`,
+    [scope.tenantId, projectId],
   )
   for (const task of tasks.rows) {
     const updated = await client.query<ScheduledTaskRow>(
-      `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING ${TASK_COLUMNS}`,
-      [scope.tenantId, scope.subjectId, task.task_id],
+      `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',execution_actor_id=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2 RETURNING ${TASK_COLUMNS}`,
+      [scope.tenantId, task.task_id],
     )
     const row = updated.rows[0]
     if (row === undefined) throw new Error("PROJECT_DELETE_TASK_UPDATE_FAILED")
+    await retireUnsentScheduledDefinition(client, scope.tenantId, task.task_id, Number(row.revision))
     await insertScheduledTaskOutbox(
       client,
       "replace",
-      { tenantId: scope.tenantId, actorId: scope.subjectId, requestId, idempotencyKey: `project-delete:${projectId}:${deletionKey}:${task.task_id}` },
+      {
+        tenantId: scope.tenantId,
+        actorId: scope.subjectId,
+        requestId,
+        idempotencyKey: `project-delete:${projectId}:${deletionKey}:${task.task_id}`,
+      },
       row,
     )
   }
@@ -192,10 +217,16 @@ function requireLineage(scope: ScheduledTaskOwnerScope, lineage: ScheduledTaskMu
   if (lineage === undefined) throw new Error("SCHEDULED_TASK_LINEAGE_REQUIRED")
   if (scope.tenantId.trim() === "") throw new Error("SCHEDULED_TASK_TENANT_REQUIRED")
   if (scope.subjectId.trim() === "") throw new Error("SCHEDULED_TASK_OWNER_REQUIRED")
-  assertScheduledTaskOutboxLineage(lineage)
+  const confirmed = {
+    tenantId: lineage.tenantId,
+    actorId: lineage.actorId,
+    requestId: lineage.requestId,
+    idempotencyKey: lineage.idempotencyKey,
+  }
+  assertScheduledTaskOutboxLineage(confirmed)
   if (lineage.tenantId !== scope.tenantId) throw new Error("SCHEDULED_TASK_LINEAGE_TENANT_MISMATCH")
   if (lineage.actorId !== scope.subjectId) throw new Error("SCHEDULED_TASK_LINEAGE_ACTOR_MISMATCH")
-  return lineage
+  return confirmed
 }
 
 function requiredIdentity(value: string, name: string): string {
@@ -208,7 +239,13 @@ function validPositiveInteger(value: number, name: string): number {
   return value
 }
 
-function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload): boolean {
+function commandLineageMatches(
+  row: Pick<
+    ScheduledTaskOutboxRow,
+    "outbox_id" | "tenant_id" | "task_id" | "command_type" | "aggregate_revision" | "actor_id" | "request_id" | "idempotency_key"
+  >,
+  payload: ScheduledTaskOutboxPayload,
+): boolean {
   const operation =
     row.command_type === "scheduler.register"
       ? "register"
@@ -226,7 +263,7 @@ function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTa
     payload.lineage.idempotency_key === row.idempotency_key &&
     payload.task.task_id === row.task_id &&
     payload.task.revision === safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION") &&
-    scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key) === row.outbox_id
+    /^scheduled_outbox_[0-9a-f]{32}$/u.test(row.outbox_id)
   )
 }
 
@@ -292,7 +329,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
       await Promise.race([acquisition, aborted])
       signal.throwIfAborted()
       const result = await Promise.race([
-        client!.query<ScheduledTaskRow & { delivery_status: ScheduledTaskOutboxStatus | null; project_available: boolean }>(
+        client!.query<
+          ScheduledTaskRow & {
+            delivery_status: ScheduledTaskOutboxStatus | null
+            project_available: boolean
+          }
+        >(
           `SELECT ${TASK_COLUMNS},
                 (SELECT o.status FROM bff_scheduled_task_outbox o
                   WHERE o.tenant_id = t.tenant_id AND o.task_id = t.task_id
@@ -301,16 +343,23 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
                   ORDER BY o.created_at DESC, o.outbox_id DESC LIMIT 1) AS delivery_status,
                 (t.project_id IS NULL OR EXISTS
                   (SELECT 1 FROM bff_project p WHERE p.project_id = t.project_id
-                    AND p.tenant_id = t.tenant_id AND p.owner_id = t.owner_id AND p.deleted_at IS NULL)) AS project_available
+                    AND p.tenant_id = t.tenant_id AND p.deleted_at IS NULL)) AS project_available
            FROM bff_scheduled_task t
-          WHERE t.tenant_id = $1 AND t.owner_id = $2 AND ($3::text IS NULL OR t.task_id = $3)
+          WHERE t.tenant_id = $1 AND ($3::text IS NULL OR t.task_id = $3)
+            AND ((t.project_id IS NULL AND t.owner_id=$2) OR EXISTS (
+              SELECT 1 FROM bff_project WHERE bff_project.tenant_id=t.tenant_id
+                AND bff_project.project_id=t.project_id AND bff_project.deleted_at IS NULL AND ${projectReadPredicate}))
           ORDER BY t.created_at ASC, t.task_id ASC`,
           [scope.tenantId, scope.subjectId, taskId ?? null],
         ),
         aborted,
       ])
       signal.throwIfAborted()
-      return result.rows.map((row) => ({ task: scheduledTaskFromRow(row), deliveryStatus: row.delivery_status, projectAvailable: row.project_available }))
+      return result.rows.map((row) => ({
+        task: scheduledTaskFromRow(row),
+        deliveryStatus: row.delivery_status,
+        projectAvailable: row.project_available,
+      }))
     } finally {
       if (cancel !== undefined) signal.removeEventListener("abort", cancel)
       release(signal.aborted)
@@ -320,8 +369,10 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
   public async findScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {
     const result = await this.database.pool.query<ScheduledTaskRow>(
       `SELECT ${TASK_COLUMNS}
-         FROM bff_scheduled_task
-        WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3`,
+         FROM bff_scheduled_task t
+        WHERE tenant_id = $1 AND task_id = $3 AND ((project_id IS NULL AND owner_id=$2) OR EXISTS (
+          SELECT 1 FROM bff_project WHERE bff_project.tenant_id=t.tenant_id AND bff_project.project_id=t.project_id
+            AND bff_project.deleted_at IS NULL AND ${projectReadPredicate}))`,
       [scope.tenantId, scope.subjectId, taskId],
     )
     const row = result.rows[0]
@@ -343,16 +394,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
     input: ScheduledTaskCreateInput,
     requestedTaskId: string | undefined,
     lineage: ScheduledTaskMutationLineage,
-  ): Promise<ScheduledTaskFact> {
+  ): Promise<ScheduledTaskMutationSnapshot> {
     const taskLineage = requireLineage(scope, lineage)
     const taskId = requiredIdentity(requestedTaskId ?? `scheduled_${randomUUID()}`, "SCHEDULED_TASK_ID")
     return this.transaction(async (client) => {
-      const commandAlreadyExists = await this.outboxExists(client, scope.tenantId, taskId, "register", taskLineage.idempotencyKey, scope.subjectId)
-      if (commandAlreadyExists) {
-        const existing = await this.lockedTask(client, scope, taskId)
-        if (existing === null) throw new Error("SCHEDULED_TASK_CREATE_CONFLICT")
-        return scheduledTaskFromRow(existing)
-      }
+      const original = await this.commandSnapshot(client, scope, taskId, "register", taskLineage.idempotencyKey)
+      if (original) return original
       const ownedProjectId = input.projectId === undefined ? null : await this.ownedProjectId(client, scope, input.projectId)
       if (input.projectId !== undefined && ownedProjectId === null) {
         throw new Error("PROJECT_NOT_FOUND")
@@ -360,9 +407,9 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
       const calendar = newCalendar(input, this.clock())
       const inserted = await client.query<ScheduledTaskRow>(
         `INSERT INTO bff_scheduled_task
-          (task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
+          (task_id, tenant_id, project_id, owner_id, execution_actor_id, title, prompt, frequency, task_time, timezone,
            weekdays, month_days, local_date, run_at, expires_at, auto_approve, enabled, status, revision)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::smallint[], $11::smallint[], $12::date, $13::timestamptz, $14::timestamptz, $15, true, 'active', 1)
+         VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9, $10::smallint[], $11::smallint[], $12::date, $13::timestamptz, $14::timestamptz, $15, true, 'active', 1)
          ON CONFLICT (task_id) DO NOTHING
          RETURNING ${TASK_COLUMNS}`,
         [
@@ -388,14 +435,12 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
         // A concurrent request with the same deterministic task id may have
         // committed first. Re-check the command identity after the conflict
         // wait so an identical retry remains idempotent.
-        if (await this.outboxExists(client, scope.tenantId, taskId, "register", taskLineage.idempotencyKey, scope.subjectId)) {
-          const existing = await this.lockedTask(client, scope, taskId)
-          if (existing !== null) return scheduledTaskFromRow(existing)
-        }
+        const original = await this.commandSnapshot(client, scope, taskId, "register", taskLineage.idempotencyKey)
+        if (original) return original
         throw new Error("SCHEDULED_TASK_CREATE_CONFLICT")
       }
       await this.insertOutbox(client, "register", taskLineage, row)
-      return scheduledTaskFromRow(row)
+      return scheduledTaskMutationFromRow(row)
     })
   }
 
@@ -403,8 +448,8 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
     scope: ScheduledTaskOwnerScope,
     taskId: string,
     input: ScheduledTaskPatch,
-    lineage: ScheduledTaskMutationLineage,
-  ): Promise<ScheduledTaskFact | null> {
+    lineage: ScheduledTaskUpdateLineage,
+  ): Promise<ScheduledTaskMutationSnapshot | null> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
       const binding = await this.taskBinding(client, scope, taskId)
@@ -414,23 +459,39 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
       const current = await this.lockedTask(client, scope, taskId)
       if (current === null) return null
       if (current.project_id !== binding.project_id) throw new Error("PROJECT_NOT_FOUND")
-      if (await this.outboxExists(client, scope.tenantId, taskId, "replace", taskLineage.idempotencyKey, scope.subjectId)) {
-        return scheduledTaskFromRow(current)
-      }
+      const original = await this.commandSnapshot(client, scope, taskId, "replace", taskLineage.idempotencyKey)
+      if (original) return original
       if (project !== null && project.deleted_at !== null) throw new Error("PROJECT_NOT_FOUND")
+      if (
+        !Number.isSafeInteger(lineage.expectedRevision) ||
+        lineage.expectedRevision < 1 ||
+        lineage.expectedRevision >= Number.MAX_SAFE_INTEGER ||
+        Number(current.revision) !== lineage.expectedRevision
+      )
+        throw Error("SCHEDULED_TASK_PRECONDITION_FAILED")
+      const executionChanged = Object.keys(input).some((key) => key !== "title")
+      const execution = scheduledExecutionBinding(
+        {
+          executionActorId: current.execution_actor_id,
+          enabled: current.enabled,
+          status: current.status,
+        },
+        scope.subjectId,
+        input,
+        executionChanged,
+      )
       const changedRule = ["frequency", "time", "timezone", "weekdays", "monthDays", "localDate", "runAt"].some((field) => Object.hasOwn(input, field))
       const priorCalendar = storedCalendar(current)
       const calendar = changedRule ? newCalendar(input as ScheduledCalendar, this.clock(), priorCalendar.runAt) : priorCalendar
       const updated = await client.query<ScheduledTaskRow>(
-        `UPDATE bff_scheduled_task SET title = $4, prompt = $5, frequency = $6, task_time = $7,
-          timezone = $8, weekdays = $9::smallint[], month_days = $10::smallint[], local_date = $11::date, run_at = $12::timestamptz, expires_at = $13::timestamptz,
-          auto_approve = $14, enabled = $15, status = $16, revision = revision + 1,
+        `UPDATE bff_scheduled_task SET title = $3, prompt = $4, frequency = $5, task_time = $6,
+          timezone = $7, weekdays = $8::smallint[], month_days = $9::smallint[], local_date = $10::date, run_at = $11::timestamptz, expires_at = $12::timestamptz,
+          auto_approve = $13, enabled = $14, status = $15, execution_actor_id=$16, revision = revision + 1,
           updated_at = CURRENT_TIMESTAMP(3)
-         WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3
+         WHERE tenant_id = $1 AND task_id = $2
          RETURNING ${TASK_COLUMNS}`,
         [
           scope.tenantId,
-          scope.subjectId,
           taskId,
           input.title ?? current.title,
           input.prompt ?? current.prompt,
@@ -443,14 +504,16 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
           calendar.runAt ?? null,
           input.expiresAt === undefined ? current.expires_at : input.expiresAt,
           input.autoApprove ?? current.auto_approve,
-          input.enabled ?? current.enabled,
-          input.status ?? current.status,
+          execution.enabled,
+          execution.status,
+          execution.executionActorId,
         ],
       )
       const row = updated.rows[0]
       if (row === undefined) return null
+      await retireUnsentScheduledDefinition(client, scope.tenantId, taskId, Number(row.revision))
       await this.insertOutbox(client, "replace", taskLineage, row)
-      return scheduledTaskFromRow(row)
+      return scheduledTaskMutationFromRow(row)
     })
   }
 
@@ -461,15 +524,16 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
   public async deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
+      const binding = await this.taskBinding(client, scope, taskId)
+      if (binding?.project_id) {
+        if ((await this.lockedProject(client, scope, binding.project_id)) === null) throw Error("PROJECT_NOT_FOUND")
+      }
       const current = await this.lockedTask(client, scope, taskId)
       if (current === null) return this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)
       if (await this.outboxExists(client, scope.tenantId, taskId, "delete", taskLineage.idempotencyKey, scope.subjectId)) return true
+      await retireUnsentScheduledDefinition(client, scope.tenantId, taskId, null)
       await this.insertOutbox(client, "delete", taskLineage, current)
-      const deleted = await client.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3", [
-        scope.tenantId,
-        scope.subjectId,
-        taskId,
-      ])
+      const deleted = await client.query("DELETE FROM bff_scheduled_task WHERE tenant_id = $1 AND task_id = $2", [scope.tenantId, taskId])
       return deleted.rowCount === 1
     })
   }
@@ -609,19 +673,18 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
   }
 
   private async ownedProjectId(client: PoolClient, scope: ScheduledTaskOwnerScope, idOrSlug: string): Promise<string | null> {
-    const result = await client.query<{ project_id: string }>(
-      `SELECT project_id FROM bff_project
-        WHERE bff_project.deleted_at IS NULL AND tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
-        LIMIT 1 FOR SHARE`,
-      [scope.tenantId, scope.subjectId, idOrSlug],
-    )
-    return result.rows[0]?.project_id ?? null
+    const access = await lockProjectForEdit(client, scope, idOrSlug)
+    if (access.kind === "forbidden") throw Error("SCHEDULED_TASK_EDIT_FORBIDDEN")
+    return access.kind === "editable" ? access.projectId : null
   }
 
   private async lockedTask(client: PoolClient, scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskRow | null> {
     const result = await client.query<ScheduledTaskRow>(
       `SELECT ${TASK_COLUMNS}
-         FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3 FOR UPDATE`,
+         FROM bff_scheduled_task t WHERE tenant_id = $1 AND task_id = $3
+           AND ((project_id IS NULL AND owner_id=$2) OR EXISTS (
+             SELECT 1 FROM bff_project WHERE bff_project.tenant_id=t.tenant_id AND bff_project.project_id=t.project_id
+               AND bff_project.deleted_at IS NULL AND ${projectEditPredicate})) FOR UPDATE`,
       [scope.tenantId, scope.subjectId, taskId],
     )
     return result.rows[0] ?? null
@@ -631,21 +694,42 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskOutboxRepos
     const result = await client.query<ScheduledTaskBindingRow>(
       `SELECT project_id
          FROM bff_scheduled_task
-        WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3`,
-      [scope.tenantId, scope.subjectId, taskId],
+        WHERE tenant_id = $1 AND task_id = $2`,
+      [scope.tenantId, taskId],
     )
     return result.rows[0]
   }
 
   private async lockedProject(client: PoolClient, scope: ScheduledTaskOwnerScope, projectId: string): Promise<ScheduledTaskProjectRow | null> {
-    const result = await client.query<ScheduledTaskProjectRow>(
-      `SELECT deleted_at
-         FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2 AND project_id = $3
-        FOR SHARE`,
-      [scope.tenantId, scope.subjectId, projectId],
-    )
-    return result.rows[0] ?? null
+    const access = await lockProjectForEdit(client, scope, projectId)
+    if (access.kind === "forbidden") throw Error("SCHEDULED_TASK_EDIT_FORBIDDEN")
+    return access.kind === "editable" ? { deleted_at: null } : null
+  }
+
+  private async commandSnapshot(
+    client: PoolClient,
+    scope: ScheduledTaskOwnerScope,
+    taskId: string,
+    operation: ScheduledTaskOutboxOperation,
+    key: string,
+  ): Promise<ScheduledTaskMutationSnapshot | null> {
+    const row = (
+      await client.query<
+        Pick<
+          ScheduledTaskOutboxRow,
+          "outbox_id" | "tenant_id" | "task_id" | "command_type" | "aggregate_revision" | "actor_id" | "request_id" | "idempotency_key" | "payload"
+        >
+      >(
+        `SELECT outbox_id,tenant_id,task_id,command_type,aggregate_revision,actor_id,request_id,idempotency_key,payload
+        FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND task_id=$2 AND command_type=$3 AND actor_id=$4 AND idempotency_key=$5`,
+        [scope.tenantId, taskId, commandType(operation), scope.subjectId, key],
+      )
+    ).rows[0]
+    if (!row) return null
+    const payload = parseScheduledTaskOutboxPayload(row.payload)
+    if (!commandLineageMatches(row, payload)) throw Error("SCHEDULED_TASK_OUTBOX_LINEAGE_MISMATCH")
+    const { taskId: id, ownerId: _ownerId, ...snapshot } = scheduledTaskOutboxTaskFromPayload(payload.task)
+    return { id, ...snapshot }
   }
 
   private async outboxExists(

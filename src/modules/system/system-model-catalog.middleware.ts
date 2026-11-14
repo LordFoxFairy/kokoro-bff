@@ -11,8 +11,6 @@ import { handleSystemModelCatalogBusiness, systemModelCatalogRequest } from "../
 
 @Injectable()
 export class SystemModelCatalogMiddleware implements NestMiddleware {
-  private readonly idempotency = new Map<string, import("../../application/idempotency.js").IdempotencyEntry>()
-
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
@@ -24,19 +22,43 @@ export class SystemModelCatalogMiddleware implements NestMiddleware {
       return
     }
     void this.handle(request, response).catch(() => {
-      if (!response.headersSent && !response.writableEnded && !response.destroyed)
-        send(response, 503, failure("system_projection_not_configured", "System model catalog is unavailable", requestId(request)))
+      if (!request.aborted && !response.headersSent && !response.writableEnded && !response.destroyed) {
+        const id = requestId(request)
+        response.setHeader("x-request-id", id)
+        send(response, 503, failure("system_projection_not_configured", "System model catalog is unavailable", id))
+      }
     })
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const id = requestId(request)
-    response.setHeader("x-request-id", id)
-    const admitted = await authorizeUserRequest(request, this.config, this.admission, id, AbortSignal.timeout(10_000), response)
-    if (!admitted.ok) {
-      send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
-      return
+    const deadlineAt = performance.now() + Math.min(this.config.upstreamTimeoutMs, 10_000)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - performance.now()))
+    const onAborted = () => controller.abort()
+    const onClosed = () => {
+      if (!response.writableEnded) controller.abort()
     }
-    await handleSystemModelCatalogBusiness(request, response, this.config, admitted.context, this.idempotency, null)
+    request.once("aborted", onAborted)
+    response.once("close", onClosed)
+    const check = () => {
+      if (request.aborted || response.destroyed || response.writableEnded || performance.now() >= deadlineAt) controller.abort()
+      controller.signal.throwIfAborted()
+    }
+    try {
+      check()
+      response.setHeader("x-request-id", id)
+      const admitted = await authorizeUserRequest(request, this.config, this.admission, id, controller.signal, response)
+      check()
+      if (!admitted.ok) {
+        send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
+        return
+      }
+      await handleSystemModelCatalogBusiness(request, response, this.config, admitted.context, { signal: controller.signal, deadlineAt })
+    } finally {
+      clearTimeout(timer)
+      request.removeListener("aborted", onAborted)
+      response.removeListener("close", onClosed)
+    }
   }
 }

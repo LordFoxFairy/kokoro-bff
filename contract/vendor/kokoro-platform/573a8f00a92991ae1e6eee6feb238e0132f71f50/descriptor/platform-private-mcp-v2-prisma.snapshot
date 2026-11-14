@@ -1,0 +1,826 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider     = "postgresql"
+  relationMode = "prisma"
+  schemas      = ["kokoro_platform"]
+}
+
+enum OwnerKind {
+  user
+  project
+  organization
+  session
+
+  @@schema("kokoro_platform")
+  @@map("capability_owner_kind")
+}
+
+enum McpOwnerKind {
+  user
+  project
+  organization
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_owner_kind")
+}
+
+enum SkillStatus {
+  draft
+  active
+  disabled
+  withdrawn
+  quarantined
+  discarded
+  deleted
+
+  @@schema("kokoro_platform")
+  @@map("capability_skill_status")
+}
+
+enum SkillAcquisitionKind {
+  unknown
+  direct
+  hub
+
+  @@schema("kokoro_platform")
+  @@map("skill_acquisition_kind")
+}
+
+enum SkillPackagePhase {
+  none
+  intent
+  upload_pending
+  uploaded
+  validated
+  aborted
+
+  @@schema("kokoro_platform")
+  @@map("capability_skill_package_phase")
+}
+
+enum SkillImportPhase {
+  intent
+  upload_pending
+  uploaded
+  completed
+  rejected
+  expired
+
+  @@schema("kokoro_platform")
+  @@map("capability_skill_import_phase")
+}
+
+enum ConnectorType {
+  builtin
+  byok
+  mcp
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_connector_type")
+}
+
+enum ConnectorStatus {
+  pending
+  active
+  error
+  revoked
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_connector_status")
+}
+
+enum ServerTransport {
+  stdio
+  streamable_http @map("streamable-http")
+  sse_compat      @map("sse-compat")
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_server_transport")
+}
+
+enum ServerStatus {
+  pending
+  registered
+  disabled
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_server_status")
+}
+
+enum McpServerPrepareStatus {
+  pending_prepare
+  prepare_failed
+  needs_oauth
+  ready
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_server_prepare_status")
+}
+
+enum ConnectionStatus {
+  active
+  revoked
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_connection_status")
+}
+
+enum AuthorizationStatus {
+  pending
+  approved
+  revoked
+  failed
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_connector_authorization_status")
+}
+
+enum McpCredentialKind {
+  oauth_access_token
+  oauth_refresh_token
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_credential_kind")
+}
+
+enum McpCredentialStatus {
+  active
+  revoked
+
+  @@schema("kokoro_platform")
+  @@map("capability_mcp_credential_status")
+}
+
+enum ReceiptStatus {
+  processing
+  completed
+  failed
+  external_unknown
+  expired
+
+  @@schema("kokoro_platform")
+  @@map("capability_command_receipt_status")
+}
+
+enum ReceiptFailureKind {
+  retryable
+  terminal
+  unknown
+
+  @@schema("kokoro_platform")
+  @@map("capability_command_receipt_failure_kind")
+}
+
+enum OutboxStatus {
+  pending
+  published
+
+  @@schema("kokoro_platform")
+  @@map("capability_outbox_status")
+}
+
+model Skill {
+  tenantId        String      @map("tenant_id") @db.VarChar(255)
+  id              String      @id @map("skill_id") @db.VarChar(191)
+  seriesId        String      @map("series_id") @db.VarChar(191)
+  ownerKind       OwnerKind   @map("owner_kind")
+  ownerId         String      @map("owner_id") @db.VarChar(191)
+  displayName     String      @map("display_name") @db.VarChar(255)
+  summary         String      @db.Text
+  searchText      String      @map("search_text") @db.Text
+  tagsJson        Json        @map("tags_json") @db.JsonB
+  metadataJson    Bytes?      @map("metadata_json")
+  revision        Int
+  packageAssetRef String?     @map("package_asset_ref") @db.VarChar(255)
+  contentSha256   String?     @map("content_sha256") @db.Char(64)
+  packagePhase             SkillPackagePhase @default(none) @map("package_phase")
+  packageAttemptId         String?           @map("package_attempt_id") @db.VarChar(191)
+  packageAttemptEpoch      BigInt            @default(0) @map("package_attempt_epoch")
+  packageVersion           BigInt            @default(0) @map("package_version")
+  packageOriginSubjectId   String?           @map("package_origin_subject_id") @db.VarChar(191)
+  packageExpectedSizeBytes BigInt?           @map("package_expected_size_bytes")
+  packageFilename          String?           @map("package_filename") @db.VarChar(255)
+  packageMimeType          String?           @map("package_mime_type") @db.VarChar(191)
+  packageBeginCommandId    String?           @map("package_begin_command_id") @db.VarChar(191)
+  packageBeginDigest       String?           @map("package_begin_digest") @db.Char(64)
+  packageUploadId          String?           @map("package_upload_id") @db.VarChar(191)
+  packageManifestIdentity  String?           @map("package_manifest_identity") @db.VarChar(191)
+  status          SkillStatus
+  createdAt       DateTime    @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @map("updated_at") @db.Timestamptz(3)
+  examplePromptsJson Json @default("[]") @map("example_prompts_json") @db.JsonB
+  coverAssetRef String? @map("cover_asset_ref") @db.VarChar(255)
+  creationMethod String? @map("creation_method") @db.VarChar(16)
+  creatorSubjectRef String? @map("creator_subject_ref") @db.VarChar(255)
+  packageSourceVersionId String? @map("package_source_version_id") @db.VarChar(1024)
+  publicationAudience String @default("owner") @map("publication_audience") @db.VarChar(16)
+  publisherKind String? @map("publisher_kind") @db.VarChar(32)
+  publisherRef String? @map("publisher_ref") @db.VarChar(255)
+  quarantinePreviousStatus SkillStatus? @map("quarantine_previous_status")
+  sourceKind String? @map("source_kind") @db.VarChar(32)
+  stateVersion BigInt @default(1) @map("state_version")
+  originalName String? @map("original_name") @db.VarChar(64)
+  packageFileCount Int? @map("package_file_count")
+  installations   SkillInstallation[]
+  creationSources SkillCreationSource[]
+  coverUploads SkillCoverUpload[]
+  currentPublications SkillSeriesPublication[] @relation("CurrentSkillVersion")
+  appBindings SkillAppBinding[]
+
+  @@unique([tenantId, seriesId, revision], map: "uq_skill_series_revision")
+  @@index([tenantId, ownerKind, ownerId, displayName, id], map: "ix_skill_owner_display_id")
+  @@index([tenantId, sourceKind, displayName, id], map: "ix_skill_tenant_source_display_id")
+  @@index([tenantId, id], map: "ix_skill_tenant")
+  @@index([tenantId, displayName, id], map: "ix_skill_tenant_display_id")
+  @@schema("kokoro_platform")
+  @@map("skill")
+  categories SkillCategory[]
+
+}
+
+model SkillSeriesPublication {
+  tenantId        String   @map("tenant_id") @db.VarChar(255)
+  seriesId        String   @map("series_id") @db.VarChar(191)
+  currentVersionId String  @map("current_version_id") @db.VarChar(191)
+  audience        String   @db.VarChar(16)
+  stateVersion    BigInt   @default(1) @map("state_version")
+  publishedAt     DateTime @map("published_at") @db.Timestamptz(3)
+  withdrawnAt     DateTime? @map("withdrawn_at") @db.Timestamptz(3)
+  currentVersion  Skill @relation("CurrentSkillVersion", fields: [currentVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, seriesId], map: "pk_skill_series_publication")
+  @@index([tenantId, currentVersionId], map: "ix_skill_series_current_version")
+  @@index([tenantId, withdrawnAt, audience, seriesId], map: "ix_skill_series_catalog")
+  @@schema("kokoro_platform")
+  @@map("skill_series_publication")
+}
+
+model SkillImportIntent {
+  tenantId             String           @map("tenant_id") @db.VarChar(255)
+  intentId             String           @map("intent_id") @db.VarChar(191)
+  subjectId            String           @map("subject_id") @db.VarChar(191)
+  skillId              String           @map("skill_id") @db.VarChar(191)
+  phase                SkillImportPhase
+  filename             String           @db.VarChar(255)
+  sizeBytes            BigInt           @map("size_bytes")
+  contentSha256        String           @map("content_sha256") @db.Char(64)
+  mimeType             String           @map("mime_type") @db.VarChar(191)
+  uploadId             String?          @map("upload_id") @db.VarChar(191)
+  assetId              String?          @map("asset_id") @db.VarChar(255)
+  sourceVersionId      String?          @map("source_version_id") @db.VarChar(1024)
+  uploadedSizeBytes    BigInt?          @map("uploaded_size_bytes")
+  uploadedContentSha256 String?         @map("uploaded_content_sha256") @db.Char(64)
+  rejectionCode        String?          @map("rejection_code") @db.VarChar(64)
+  createdAt            DateTime         @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime         @map("updated_at") @db.Timestamptz(3)
+  expiresAt            DateTime         @map("expires_at") @db.Timestamptz(3)
+  terminalAt           DateTime?        @map("terminal_at") @db.Timestamptz(3)
+
+  @@id([tenantId, intentId], map: "pk_skill_import_intent")
+  @@unique([tenantId, skillId], map: "uq_skill_import_intent_skill")
+  @@schema("kokoro_platform")
+  @@map("skill_import_intent")
+}
+
+model CustomApiProfile {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  id String @id @map("profile_id") @db.VarChar(191)
+  userId String @map("user_id") @db.VarChar(191)
+  name String @db.VarChar(400)
+  instructions String? @db.VarChar(4000)
+  stateVersion Int @default(1) @map("state_version")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, userId, name], map: "uq_custom_api_profile_owner_name")
+  @@index([tenantId, userId, id], map: "ix_custom_api_profile_owner_id")
+  @@schema("kokoro_platform")
+  @@map("custom_api_profile")
+}
+
+model CustomApiEnvironmentSecret {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  id String @id @map("secret_id") @db.VarChar(191)
+  profileId String @map("profile_id") @db.VarChar(191)
+  envName String @map("env_name") @db.VarChar(128)
+  ciphertext Bytes
+  nonce Bytes
+  tag Bytes
+  keyVersion String @map("key_version") @db.VarChar(64)
+  fingerprint String @db.Char(64)
+  fingerprintKeyVersion String @map("fingerprint_key_version") @db.VarChar(64)
+  stateVersion Int @default(1) @map("state_version")
+  status String @db.VarChar(16)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, profileId, envName], map: "uq_custom_api_environment_secret_name")
+  @@index([tenantId, profileId, id], map: "ix_custom_api_environment_secret_profile")
+  @@schema("kokoro_platform")
+  @@map("custom_api_environment_secret")
+}
+
+model McpConnector {
+  serverId String? @map("server_id") @db.VarChar(191)
+  tenantId              String          @map("tenant_id") @db.VarChar(255)
+  id                    String          @id @map("mcp_connector_id") @db.VarChar(191)
+  ownerKind             McpOwnerKind    @map("owner_kind")
+  ownerId               String          @map("owner_id") @db.VarChar(191)
+  connectorType         ConnectorType   @map("mcp_connector_type")
+  providerKey           String          @map("provider_key") @db.VarChar(191)
+  externalAccountRef    String?         @map("external_account_ref") @db.VarChar(255)
+  pendingAuthorizationId String?         @map("pending_authorization_id") @db.VarChar(191)
+  activeAuthorizationId  String?         @map("active_authorization_id") @db.VarChar(191)
+  status                 ConnectorStatus
+  revokedAt              DateTime?       @map("revoked_at") @db.Timestamptz(3)
+  revocationEventId      String?         @map("revocation_event_id") @db.VarChar(191)
+  createdAt             DateTime?       @map("created_at") @db.Timestamptz(3)
+  description           String?         @db.VarChar(4000)
+  displayName           String?         @map("display_name") @db.VarChar(400)
+  enabled               Boolean         @default(true)
+  stateVersion          Int             @default(1) @map("state_version")
+  updatedAt             DateTime?       @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, ownerKind, ownerId, providerKey, externalAccountRef], map: "uq_mcp_connector_owner_provider_account")
+  @@index([tenantId, ownerKind, ownerId, id], map: "ix_mcp_connector_personal")
+  @@index([tenantId, id], map: "ix_mcp_connector_tenant")
+  @@index([tenantId, providerKey, id], map: "ix_mcp_connector_tenant_provider_id")
+  @@schema("kokoro_platform")
+  @@map("mcp_connector")
+}
+
+model McpServer {
+  visibility String @default("global") @db.VarChar(20)
+  ownerTenantId String? @map("owner_tenant_id") @db.VarChar(255)
+  ownerUserId String? @map("owner_user_id") @db.VarChar(191)
+  displayName String? @map("display_name") @db.VarChar(100)
+  stateVersion Int @default(1) @map("state_version")
+  authorizationRequired Boolean @default(false) @map("authorization_required")
+  oauthScopes String[] @default([]) @map("oauth_scopes")
+  oauthResourceMetadataUrl String? @map("oauth_resource_metadata_url") @db.VarChar(2048)
+  oauthAuthorizationServer String? @map("oauth_authorization_server") @db.VarChar(2048)
+  oauthAuthorizationEndpoint String? @map("oauth_authorization_endpoint") @db.VarChar(2048)
+  oauthTokenEndpoint String? @map("oauth_token_endpoint") @db.VarChar(2048)
+  id                String          @id @map("server_id") @db.VarChar(191)
+  providerKey       String          @map("provider_key") @db.VarChar(191)
+  serverIdentity    String          @map("server_identity") @db.VarChar(255)
+  transport         ServerTransport
+  declarationDigest String?         @map("declaration_digest") @db.Char(64)
+  status            ServerStatus
+  notes             String?                @db.VarChar(4000)
+  prepareStatus     McpServerPrepareStatus @default(pending_prepare) @map("prepare_status")
+  preparedAt        DateTime?              @map("prepared_at") @db.Timestamptz(3)
+  updatedAt         DateTime               @default(now()) @map("updated_at") @db.Timestamptz(3)
+  declarationsJson  Json?                  @map("declarations_json") @db.JsonB
+
+  @@unique([ownerTenantId, ownerUserId, serverIdentity], map: "uq_mcp_server_private_identity")
+  @@index([providerKey, id], map: "ix_mcp_server_provider_id")
+  @@schema("kokoro_platform")
+  @@map("mcp_server")
+}
+
+// Append-only Platform publication facts. Storage upload source is not the runtime version.
+model McpManagedPackageVersion {
+  providerKey String @map("provider_key") @db.VarChar(64)
+  id String @id @db.VarChar(191)
+  serverId String @map("server_id") @db.VarChar(191)
+  sourceTenantId String @map("source_tenant_id") @db.VarChar(255)
+  sourceSubjectId String @map("source_subject_id") @db.VarChar(191)
+  sourcePackageId String @map("source_package_id") @db.VarChar(191)
+  sourceUploadId String @map("source_upload_id") @db.VarChar(191)
+  uploadSourceVersionId String @map("upload_source_version_id") @db.VarChar(512)
+  assetId String @map("asset_id") @db.VarChar(191)
+  contentSha256 String @map("content_sha256") @db.Char(64)
+  sizeBytes BigInt @map("size_bytes")
+  manifestSha256 String @map("manifest_sha256") @db.Char(64)
+  entrypoint String @db.VarChar(256)
+  declarationDigest String @map("declaration_digest") @db.Char(64)
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@unique([sourceTenantId, sourcePackageId], map: "uq_mcp_package_source")
+  @@unique([serverId], map: "uq_mcp_package_server")
+  @@schema("kokoro_platform")
+  @@map("mcp_managed_package_version")
+}
+
+model McpOAuthClientRegistration {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  id String @id @map("registration_id") @db.VarChar(191)
+  serverId String @map("server_id") @db.VarChar(191)
+  connectorId String @map("connector_id") @db.VarChar(191)
+  userId String @map("user_id") @db.VarChar(191)
+  clientId String @map("client_id") @db.VarChar(1024)
+  origin String @db.VarChar(8)
+  ciphertext Bytes
+  nonce Bytes
+  tag Bytes
+  keyVersion String @map("key_version") @db.VarChar(64)
+  fingerprint String @db.Char(64)
+  fingerprintKeyVersion String @map("fingerprint_key_version") @db.VarChar(64)
+  stateVersion Int @default(1) @map("state_version")
+  status String @db.VarChar(16)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, userId, serverId], map: "uq_mcp_oauth_registration_owner_server")
+  @@schema("kokoro_platform")
+  @@map("mcp_oauth_client_registration")
+}
+
+model McpConnectorSecret {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  id String @id @map("secret_id") @db.VarChar(191)
+  serverId String @map("server_id") @db.VarChar(191)
+  connectorId String @map("connector_id") @db.VarChar(191)
+  userId String @map("user_id") @db.VarChar(191)
+  kind String @db.VarChar(32)
+  slot String @db.VarChar(128)
+  ciphertext Bytes
+  nonce Bytes
+  tag Bytes
+  keyVersion String @map("key_version") @db.VarChar(64)
+  fingerprint String @db.Char(64)
+  fingerprintKeyVersion String @map("fingerprint_key_version") @db.VarChar(64)
+  stateVersion Int @default(1) @map("state_version")
+  status String @db.VarChar(16)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, connectorId, kind, slot], map: "uq_mcp_connector_secret_slot")
+  @@index([tenantId, serverId, status, stateVersion], map: "ix_mcp_connector_secret_server_state")
+  @@schema("kokoro_platform")
+  @@map("mcp_connector_secret")
+}
+
+model McpConnection {
+  tenantId             String           @map("tenant_id") @db.VarChar(255)
+  id                   String           @id @map("connection_id") @db.VarChar(191)
+  connectorId          String           @map("mcp_connector_id") @db.VarChar(191)
+  serverId             String           @map("server_id") @db.VarChar(191)
+  allowedSelectorsJson Json             @map("allowed_selectors_json") @db.JsonB
+  policyDigest         String           @map("policy_digest") @db.Char(64)
+  status               ConnectionStatus
+  revokedAt            DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  revocationEventId    String?          @map("revocation_event_id") @db.VarChar(191)
+
+  @@unique([tenantId, connectorId, serverId], map: "uq_mcp_connection_connector_server")
+  @@index([tenantId, id], map: "ix_mcp_connection_tenant")
+  @@index([tenantId, serverId, id], map: "ix_mcp_connection_tenant_server_id")
+  @@schema("kokoro_platform")
+  @@map("mcp_connection")
+}
+
+model McpConnectorAuthorization {
+  tenantId                 String              @map("tenant_id") @db.VarChar(255)
+  id                       String              @id @map("authorization_id") @db.VarChar(191)
+  connectorId              String              @map("mcp_connector_id") @db.VarChar(191)
+  requestedScopesJson      Json                @map("requested_scopes_json") @db.JsonB
+  approvedScopesJson       Json?               @map("approved_scopes_json") @db.JsonB
+  externalAccountRef       String?             @map("external_account_ref") @db.VarChar(255)
+  providerAuthorizationRef String?             @map("provider_authorization_ref") @db.VarChar(255)
+  oauthStateHash           String?             @map("oauth_state_hash") @db.Char(64)
+  oauthVerifierCiphertext  Bytes?              @map("oauth_verifier_ciphertext")
+  oauthVerifierNonce       Bytes?              @map("oauth_verifier_nonce")
+  oauthVerifierTag         Bytes?              @map("oauth_verifier_tag")
+  oauthVerifierKeyVersion  String?             @map("oauth_verifier_key_version") @db.VarChar(64)
+  oauthExchangeClaimedAt   DateTime?           @map("oauth_exchange_claimed_at") @db.Timestamptz(3)
+  oauthResourceServer      String?             @map("oauth_resource_server") @db.VarChar(2048)
+  oauthAuthorizationServer String?             @map("oauth_authorization_server") @db.VarChar(2048)
+  oauthAuthorizationEndpoint String?           @map("oauth_authorization_endpoint") @db.VarChar(2048)
+  oauthTokenEndpoint       String?             @map("oauth_token_endpoint") @db.VarChar(2048)
+  oauthClientId            String?             @map("oauth_client_id") @db.VarChar(1024)
+  oauthClientRegistrationId String?            @map("oauth_client_registration_id") @db.VarChar(191)
+  oauthClientRegistrationVersion Int?          @map("oauth_client_registration_version")
+  oauthClientSecretVersion Int?                @map("oauth_client_secret_version")
+  oauthTokenAuthMethod     String?              @map("oauth_token_auth_method") @db.VarChar(32)
+  status                   AuthorizationStatus
+  expiresAt                DateTime?           @map("expires_at") @db.Timestamptz(3)
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime            @map("updated_at") @db.Timestamptz(3)
+  approvedAt               DateTime?           @map("approved_at") @db.Timestamptz(3)
+
+  @@index([tenantId, connectorId, status, createdAt, id], map: "ix_mcp_authorization_tenant_status_created")
+  @@unique([tenantId, oauthStateHash], map: "uq_mcp_authorization_oauth_state")
+  @@schema("kokoro_platform")
+  @@map("mcp_connector_authorization")
+}
+
+/** Platform-owned opaque OAuth material. Plaintext is never persisted or projected. */
+model McpConnectorCredential {
+  tenantId        String              @map("tenant_id") @db.VarChar(255)
+  id              String              @id @map("credential_id") @db.VarChar(191)
+  connectorId     String              @map("mcp_connector_id") @db.VarChar(191)
+  authorizationId String?             @map("authorization_id") @db.VarChar(191)
+  slot            String              @db.VarChar(64)
+  kind            McpCredentialKind
+  ciphertext      Bytes
+  nonce           Bytes
+  tag             Bytes
+  keyVersion      String              @map("key_version") @db.VarChar(64)
+  stateVersion    Int                 @default(1) @map("state_version")
+  status          McpCredentialStatus
+  expiresAt       DateTime?           @map("expires_at") @db.Timestamptz(3)
+  revokedAt       DateTime?           @map("revoked_at") @db.Timestamptz(3)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @map("updated_at") @db.Timestamptz(3)
+
+  refreshAttemptId        String?   @map("refresh_attempt_id") @db.Uuid
+  refreshAttemptExpiresAt DateTime? @map("refresh_attempt_expires_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, connectorId, slot], map: "uq_mcp_credential_connector_slot")
+  @@index([tenantId, connectorId, slot, status, stateVersion], map: "ix_mcp_credential_active_slot")
+  @@index([tenantId, authorizationId], map: "ix_mcp_credential_authorization")
+  @@schema("kokoro_platform")
+  @@map("mcp_connector_credential")
+}
+
+model SkillInstallation {
+  id                String    @id @map("installation_id") @db.VarChar(191)
+  tenantId          String    @map("tenant_id") @db.VarChar(255)
+  targetOwnerKind   OwnerKind @map("target_owner_kind")
+  targetOwnerId     String    @map("target_owner_id") @db.VarChar(191)
+  skillSeriesId     String    @map("skill_series_id") @db.VarChar(191)
+  skillId           String    @map("skill_id") @db.VarChar(191)
+  packageAssetRef   String    @map("package_asset_ref") @db.VarChar(255)
+  contentSha256     String    @map("content_sha256") @db.Char(64)
+  revision          Int
+  enabled           Boolean
+  installedAt       DateTime  @map("installed_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @map("updated_at") @db.Timestamptz(3)
+  removedAt         DateTime? @map("removed_at") @db.Timestamptz(3)
+  acquisitionKind   SkillAcquisitionKind @default(unknown) @map("acquisition_kind")
+  skill             Skill     @relation(fields: [skillId], references: [id])
+
+  @@unique([tenantId, targetOwnerKind, targetOwnerId, skillSeriesId], map: "uq_skill_installation_target_series")
+  @@index([tenantId, targetOwnerKind, targetOwnerId, removedAt, enabled, id], map: "ix_skill_installation_target_list")
+  @@index([tenantId, skillId], map: "ix_skill_installation_skill")
+  @@schema("kokoro_platform")
+  @@map("skill_installation")
+}
+
+model TransactionAdmissionSlot {
+  slotId         Int       @id @map("slot_id")
+  leaseOwner     String?   @map("lease_owner") @db.VarChar(191)
+  leaseEpoch     BigInt    @default(0) @map("lease_epoch")
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+
+  @@schema("kokoro_platform")
+  @@map("transaction_admission_slot")
+}
+
+model CommandReceipt {
+  tenantId          String              @map("tenant_id") @db.VarChar(255)
+  commandId         String              @map("command_id") @db.VarChar(191)
+  requestDigest     String              @map("request_digest") @db.Char(64)
+  operation         String              @db.VarChar(191)
+  status            ReceiptStatus
+  leaseOwner        String?             @map("lease_owner") @db.VarChar(191)
+  leaseEpoch        BigInt              @default(0) @map("lease_epoch")
+  leaseExpiresAt    DateTime?           @map("lease_expires_at") @db.Timestamptz(3)
+  attemptCount      Int                 @default(0) @map("attempt_count")
+  nextAttemptAt     DateTime?           @map("next_attempt_at") @db.Timestamptz(3)
+  failureKind       ReceiptFailureKind? @map("failure_kind")
+  failureCode       String?             @map("failure_code") @db.VarChar(191)
+  recoveryKind      String?             @map("recovery_kind") @db.VarChar(191)
+  recoveryRef       String?             @map("recovery_ref") @db.VarChar(191)
+  recoveryPhase     String?             @map("recovery_phase") @db.VarChar(64)
+  resultJson        Json?               @map("result_json") @db.JsonB
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime            @default(now()) @map("updated_at") @db.Timestamptz(3)
+  completedAt       DateTime?           @map("completed_at") @db.Timestamptz(3)
+  terminalAt        DateTime?           @map("terminal_at") @db.Timestamptz(3)
+  retentionExpiresAt DateTime?          @map("retention_expires_at") @db.Timestamptz(3)
+  requestFingerprint String?            @map("request_fingerprint") @db.Char(64)
+  requestFingerprintKeyVersion String?  @map("request_fingerprint_key_version") @db.VarChar(64)
+
+  @@id([tenantId, commandId])
+  @@index([status, leaseExpiresAt, tenantId, commandId], map: "ix_command_receipt_stale_processing")
+  @@index([status, nextAttemptAt, tenantId, commandId], map: "ix_command_receipt_due_retry")
+  @@index([status, retentionExpiresAt, tenantId, commandId], map: "ix_command_receipt_retention")
+  @@schema("kokoro_platform")
+  @@map("command_receipt")
+}
+
+model OutboxEvent {
+  tenantId      String       @map("tenant_id") @db.VarChar(255)
+  eventId       String       @id @map("event_id") @db.VarChar(191)
+  eventType     String       @map("event_type") @db.VarChar(191)
+  aggregateType String       @map("aggregate_type") @db.VarChar(64)
+  aggregateId   String       @map("aggregate_id") @db.VarChar(191)
+  payloadJson   Json         @map("payload_json") @db.JsonB
+  occurredAt    DateTime     @map("occurred_at") @db.Timestamptz(3)
+  status        OutboxStatus @default(pending)
+  publishedAt   DateTime?    @map("published_at") @db.Timestamptz(3)
+
+  @@index([status, occurredAt, eventId], map: "ix_outbox_pending")
+  @@index([tenantId, status, occurredAt, eventId], map: "ix_outbox_tenant")
+  @@schema("kokoro_platform")
+  @@map("outbox_event")
+}
+
+model SkillCategory {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  skillId String @map("skill_id") @db.VarChar(191)
+  categoryKey String @map("category_key") @db.VarChar(32)
+  position Int
+  skill Skill @relation(fields: [skillId], references: [id])
+
+  @@id([tenantId, skillId, categoryKey], map: "pk_skill_category")
+  @@unique([tenantId, skillId, position], map: "uq_skill_category_position")
+  @@index([tenantId, categoryKey, skillId], map: "ix_skill_category_tenant_key_skill")
+  @@schema("kokoro_platform")
+  @@map("skill_category")
+}
+
+model SkillCreationSource {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  skillId String @map("skill_id") @db.VarChar(191)
+  method String @db.VarChar(16)
+  conversationId String? @map("conversation_id") @db.VarChar(255)
+  runRef String? @map("run_ref") @db.VarChar(255)
+  artifactRef String? @map("artifact_ref") @db.VarChar(255)
+  assetRef String? @map("asset_ref") @db.VarChar(255)
+  sourceEventId String? @map("source_event_id") @db.VarChar(255)
+  sourceEventSeq BigInt? @map("source_event_seq")
+  sourceEventDigest String? @map("source_event_digest") @db.Char(64)
+  contentSha256 String @map("content_sha256") @db.Char(64)
+  sizeBytes BigInt @map("size_bytes")
+  mimeType String @map("mime_type") @db.VarChar(191)
+  githubRepositoryId String? @map("github_repository_id") @db.VarChar(255)
+  githubRepositoryUrl String? @map("github_repository_url") @db.VarChar(2048)
+  githubOwnerLogin String? @map("github_owner_login") @db.VarChar(255)
+  githubOwnerUrl String? @map("github_owner_url") @db.VarChar(2048)
+  githubCommit String? @map("github_commit") @db.VarChar(64)
+  githubPath String? @map("github_path") @db.VarChar(2048)
+  githubStars BigInt? @map("github_stars")
+  githubForks BigInt? @map("github_forks")
+  githubObservedAt DateTime? @map("github_observed_at") @db.Timestamptz(3)
+  metadataSourceUrl String? @map("metadata_source_url") @db.VarChar(2048)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, skillId], map: "pk_skill_creation_source")
+  @@map("skill_creation_source")
+  @@schema("kokoro_platform")
+}
+
+model SkillCoverUpload {
+  tenantId String @map("tenant_id") @db.VarChar(255)
+  skillId String @map("skill_id") @db.VarChar(191)
+  attemptId String @map("attempt_id") @db.VarChar(191)
+  attemptEpoch BigInt @map("attempt_epoch")
+  phase String @db.VarChar(32)
+  originSubjectId String @map("origin_subject_id") @db.VarChar(255)
+  expectedDigest String @map("expected_digest") @db.Char(64)
+  expectedSizeBytes BigInt @map("expected_size_bytes")
+  filename String @db.VarChar(255)
+  mimeType String @map("mime_type") @db.VarChar(191)
+  beginCommandId String @map("begin_command_id") @db.VarChar(191)
+  beginDigest String @map("begin_digest") @db.Char(64)
+  uploadId String? @map("upload_id") @db.VarChar(191)
+  sourceVersionId String? @map("source_version_id") @db.VarChar(1024)
+  candidateAssetRef String? @map("candidate_asset_ref") @db.VarChar(255)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, skillId], map: "pk_skill_cover_upload")
+  @@map("skill_cover_upload")
+  @@schema("kokoro_platform")
+}
+
+
+model McpProvider {
+  providerKey     String    @id @map("provider_key") @db.VarChar(64)
+  displayName     String    @map("display_name") @db.VarChar(400)
+  description     String?   @db.VarChar(4000)
+  directoryType   String    @map("directory_type") @db.VarChar(32)
+  categoryKeys    String[]  @default([]) @map("category_keys")
+  examplePrompts  String[]  @default([]) @map("example_prompts")
+  author          String?   @db.VarChar(400)
+  website         String?   @db.VarChar(2048)
+  privacyUrl      String?   @map("privacy_url") @db.VarChar(2048)
+  coverImageUrl   String?   @map("cover_image_url") @db.VarChar(2048)
+  connectorTypes  ConnectorType[] @default([]) @map("connector_types")
+  defaultScopes   String[]  @default([]) @map("default_scopes")
+  authorizationRequired Boolean @default(false) @map("authorization_required")
+  allowedMcpOrigins Json?   @map("allowed_mcp_origins")
+  toolAuthorizationPolicy Json? @map("tool_authorization_policy")
+  enabled         Boolean   @default(false)
+  stateVersion    Int       @default(1) @map("state_version")
+  createdAt       DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  @@schema("kokoro_platform")
+  @@map("mcp_provider")
+}
+
+model SkillAppBinding {
+  id               String    @id @map("binding_id") @db.VarChar(191)
+  tenantId         String    @map("tenant_id") @db.VarChar(255)
+  appId            String    @map("app_id") @db.VarChar(191)
+  seriesId         String    @map("series_id") @db.VarChar(191)
+  skillId          String    @map("skill_id") @db.VarChar(191)
+  revision         Int
+  boundBySubjectId String    @map("bound_by_subject_id") @db.VarChar(191)
+  stateVersion     BigInt    @default(1) @map("state_version")
+  createdAt        DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @map("updated_at") @db.Timestamptz(3)
+  removedAt        DateTime? @map("removed_at") @db.Timestamptz(3)
+  skill            Skill     @relation(fields: [skillId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, appId, seriesId], map: "uq_skill_app_binding_series")
+  @@index([tenantId, appId, removedAt, id], map: "ix_skill_app_binding_list")
+  @@index([tenantId, skillId], map: "ix_skill_app_binding_skill")
+  @@schema("kokoro_platform")
+  @@map("skill_app_binding")
+}
+
+/// Independent pre-resource icon intent. Storage bytes and signed URLs never live here.
+model McpIconIntent {
+  id                String    @id @map("intent_id") @db.Uuid
+  tenantId          String    @map("tenant_id") @db.VarChar(255)
+  subjectId         String    @map("subject_id") @db.VarChar(191)
+  creationCommandId String    @map("creation_command_id") @db.VarChar(191)
+  beginCommandId    String    @map("begin_command_id") @db.VarChar(191)
+  filename          String    @db.VarChar(255)
+  mimeType          String    @map("mime_type") @db.VarChar(32)
+  contentSha256     String    @map("content_sha256") @db.Char(64)
+  sizeBytes         BigInt    @map("size_bytes")
+  state             String    @db.VarChar(16)
+  stateVersion      Int       @default(1) @map("state_version")
+  uploadId          String?   @map("upload_id") @db.VarChar(191)
+  sourceVersionId   String?   @map("source_version_id") @db.VarChar(1024)
+  completeCommandId String?   @map("complete_command_id") @db.VarChar(191)
+  assetRef          String?   @map("asset_ref") @db.VarChar(191)
+  width             Int?
+  height            Int?
+  qualifiedAt       DateTime? @map("qualified_at") @db.Timestamptz(3)
+  boundTargetKind   String?   @map("bound_target_kind") @db.VarChar(16)
+  boundTargetId     String?   @map("bound_target_id") @db.VarChar(191)
+  retireReason      String?   @map("retire_reason") @db.VarChar(16)
+  retiredAt         DateTime? @map("retired_at") @db.Timestamptz(3)
+  releaseProof      String?   @map("release_proof") @db.VarChar(16)
+  releasedAt        DateTime? @map("released_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, subjectId, creationCommandId], map: "uq_mcp_icon_intent_command")
+  @@index([state, expiresAt, id], map: "ix_mcp_icon_intent_expiry")
+  @@index([tenantId, subjectId, id], map: "ix_mcp_icon_intent_owner")
+  @@map("mcp_icon_intent")
+  @@schema("kokoro_platform")
+}
+
+// URL definition publication only: no shared private credentials or runtime grant.
+model McpUrlRevision {
+  id                     String                 @id @map("revision_id") @db.VarChar(191)
+  tenantId               String                 @map("tenant_id") @db.VarChar(255)
+  subjectId              String                 @map("subject_id") @db.VarChar(191)
+  serverId               String                 @map("server_id") @db.VarChar(191)
+  connectorId            String                 @map("connector_id") @db.VarChar(191)
+  sourceStateVersion     Int                    @map("source_state_version")
+  contentDigest          String                 @map("content_digest") @db.Char(64)
+  displayName            String                 @map("display_name") @db.VarChar(400)
+  serverUrl              String                 @map("server_url") @db.VarChar(255)
+  notes                  String?                @db.VarChar(4000)
+  transport              ServerTransport
+  prepareStatus          McpServerPrepareStatus @map("prepare_status")
+  authenticationRequired Boolean                @map("authentication_required")
+  declarationDigest      String?                @map("declaration_digest") @db.Char(64)
+  declarationsJson       Json?                  @map("declarations_json") @db.JsonB
+  headerNames            Json                   @map("header_names") @db.JsonB
+  oauthClientConfigured  Boolean                @map("oauth_client_configured")
+  createdAt              DateTime               @map("created_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, subjectId, serverId, sourceStateVersion], map: "uq_mcp_url_revision_source")
+  @@index([tenantId, subjectId, id], map: "ix_mcp_url_revision_owner")
+  @@map("mcp_url_revision")
+  @@schema("kokoro_platform")
+}
+
+model McpProjectPin {
+  id           String   @id @map("pin_id") @db.VarChar(191)
+  tenantId     String   @map("tenant_id") @db.VarChar(255)
+  subjectId    String   @map("subject_id") @db.VarChar(191)
+  projectId    String   @map("project_id") @db.VarChar(191)
+  serverId     String   @map("server_id") @db.VarChar(191)
+  revisionId   String   @map("revision_id") @db.VarChar(191)
+  stateVersion Int      @default(1) @map("state_version")
+  removed      Boolean  @default(false)
+  createdAt    DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, projectId, serverId], map: "uq_mcp_project_pin_source")
+  @@index([tenantId, subjectId, projectId, id], map: "ix_mcp_project_pin_list")
+  @@map("mcp_project_pin")
+  @@schema("kokoro_platform")
+}

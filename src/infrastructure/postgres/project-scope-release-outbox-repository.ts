@@ -352,11 +352,11 @@ export class PostgresProjectScopeReleaseOutboxRepository implements ProjectScope
                 count(o.command_id) FILTER (WHERE o.state='blocked')::integer AS blocked,
                 count(o.command_id) FILTER (WHERE o.scope_kind='conversation')::integer AS conversations,
                 count(o.command_id) FILTER (WHERE o.scope_kind='conversation' AND EXISTS (
-                  SELECT 1 FROM bff_conversation c WHERE c.tenant_id=d.tenant_id AND c.owner_id=d.owner_subject_id
-                    AND c.conversation_id=o.scope_id AND c.project_ref IN (p.project_id,p.slug)
+                  SELECT 1 FROM bff_conversation c WHERE c.tenant_id=d.tenant_id AND c.conversation_id=o.scope_id
+                    AND (c.project_ref=p.project_id OR (c.owner_id=d.owner_subject_id AND c.project_ref=p.slug))
                 ))::integer AS matched_conversations,
-                (SELECT count(*) FROM bff_conversation c WHERE c.tenant_id=d.tenant_id AND c.owner_id=d.owner_subject_id
-                  AND c.project_ref IN (p.project_id,p.slug))::integer AS expected_conversations,
+                (SELECT count(*) FROM bff_conversation c WHERE c.tenant_id=d.tenant_id
+                  AND (c.project_ref=p.project_id OR (c.owner_id=d.owner_subject_id AND c.project_ref=p.slug)))::integer AS expected_conversations,
                 count(o.command_id) FILTER (WHERE o.scope_kind='project' AND o.scope_id=p.project_id)::integer AS projects,
                 bool_and(o.owner_subject_id=d.owner_subject_id AND o.actor_id=d.owner_subject_id) AS trusted
            FROM bff_project_deletion d JOIN bff_project p ON p.tenant_id=d.tenant_id AND p.project_id=d.project_id

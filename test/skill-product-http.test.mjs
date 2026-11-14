@@ -449,3 +449,54 @@ test("Product binary wrapper forwards transport request-id and keeps exact respo
     await new Promise((resolve) => owner.close(resolve))
   }
 })
+
+test("Published package native early denial and dependency exception retain response correlation", async (t) => {
+  for (const failure of ["denied", "throw"])
+    await t.test(failure, async () => {
+      let admissions = 0,
+        actions = 0,
+        owners = 0
+      const { base, close } = await startProductHttpTestApp({
+        sessionAdmission: {
+          verify: async () => {
+            admissions++
+            if (failure === "throw") throw new Error("private native dependency failure")
+            return { ok: false, status: 403, code: "session_forbidden" }
+          },
+        },
+        skillAuthorization: {
+          check: async () => {
+            actions++
+            assert.fail("package read must not check an unrelated action")
+          },
+        },
+        skillProductClient: {
+          inspect: async () => {
+            owners++
+            assert.fail("failed admission reached package owner")
+          },
+        },
+      })
+      try {
+        const requestHeaders = { ...headers, "x-kokoro-request-id": "published-package-correlation" }
+        delete requestHeaders["content-type"]
+        delete requestHeaders["idempotency-key"]
+        const response = await fetch(`${base}/v1/skills/skill-1/package`, { headers: requestHeaders })
+        assert.equal(response.status, failure === "throw" ? 503 : 403)
+        assert.equal(response.headers.get("x-request-id"), "published-package-correlation")
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        assert.deepEqual(await response.json(), {
+          error: {
+            code: failure === "throw" ? "skill_dependency_unavailable" : "session_forbidden",
+            message: failure === "throw" ? "Skill dependency is unavailable" : "BFF user admission failed",
+            retryable: failure === "throw",
+          },
+        })
+        assert.equal(admissions, 1)
+        assert.equal(actions, 0)
+        assert.equal(owners, 0)
+      } finally {
+        await close()
+      }
+    })
+})

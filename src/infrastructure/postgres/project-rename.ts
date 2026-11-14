@@ -1,3 +1,4 @@
+import { lockProjectForEdit, projectEditPredicate } from "./project-access.js"
 import { parseProjectSkillSelection } from "../../domain/project/skill-selection.js"
 import { createHash } from "node:crypto"
 import { performance } from "node:perf_hooks"
@@ -16,8 +17,10 @@ import { projectName } from "../../domain/project/name.js"
 import type { PostgresBffDatabase } from "./client.js"
 
 /** A Project parent lock serializes its attributes and immutable terminal receipt together. */
-type ProjectAttributeReceipt = { data: { project_id: string; name: string } | ProjectSkillSelection }
-type ProjectAttributeResult = { kind: "committed"; receipt: ProjectAttributeReceipt } | { kind: "not_found" | "conflict" }
+type ProjectAttributeReceipt = {
+  data: { project_id: string; name: string } | ProjectSkillSelection
+}
+type ProjectAttributeResult = { kind: "committed"; receipt: ProjectAttributeReceipt } | { kind: "not_found" | "forbidden" | "conflict" }
 export async function renameProject(database: PostgresBffDatabase, command: RenameProjectCommand): Promise<RenameProjectResult> {
   const result = await mutateProjectAttribute(database, command)
   if (result.kind !== "committed") return result
@@ -42,7 +45,10 @@ async function mutateProjectAttribute(
   const value = rename ? command.name : command.installationIds
   const data: ProjectAttributeReceipt["data"] = rename
     ? { project_id: command.projectId, name: command.name }
-    : { project_id: command.projectId, installation_ids: [...command.installationIds] }
+    : {
+        project_id: command.projectId,
+        installation_ids: [...command.installationIds],
+      }
   if (!rename && parseProjectSkillSelection(command.installationIds) === null) throw new Error("PROJECT_SKILL_SELECTION_INVALID")
 
   const deadline = performance.now() + 4500
@@ -110,7 +116,9 @@ async function mutateProjectAttribute(
       throw new Error("PROJECT_RENAME_COMMIT_UNKNOWN", { cause: error })
     }
   }
-  const acquisition: { promise: Promise<PoolClient> | null } = { promise: null }
+  const acquisition: { promise: Promise<PoolClient> | null } = {
+    promise: null,
+  }
   try {
     client = await within(() => {
       acquisition.promise = database.pool.connect()
@@ -133,9 +141,17 @@ async function mutateProjectAttribute(
       "SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true),set_config('client_connection_check_interval','100ms',true)",
       [`${Math.min(1000, budget)}ms`, `${budget}ms`],
     )
-    const locked = await query<{ name: string; selected_skill_installation_ids: string[] }>(
+    const access = await lockProjectForEdit({ query }, command, command.projectId)
+    if (access.kind !== "editable") {
+      await rollback()
+      return { kind: access.kind }
+    }
+    const locked = await query<{
+      name: string
+      selected_skill_installation_ids: string[]
+    }>(
       `SELECT name, selected_skill_installation_ids FROM bff_project
-        WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL
+        WHERE tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectEditPredicate}
         FOR UPDATE`,
       [command.tenantId, command.subjectId, command.projectId],
     )
@@ -144,10 +160,11 @@ async function mutateProjectAttribute(
       await rollback()
       return { kind: "not_found" }
     }
-    const existing = await query<{ fingerprint: string; status: number; response_body: unknown }>(
-      "SELECT fingerprint,status,response_body FROM bff_idempotency_receipt WHERE scope=$1",
-      [command.receiptScope],
-    )
+    const existing = await query<{
+      fingerprint: string
+      status: number
+      response_body: unknown
+    }>("SELECT fingerprint,status,response_body FROM bff_idempotency_receipt WHERE scope=$1", [command.receiptScope])
     const row = existing.rows[0]
     if (row !== undefined) {
       const body = row.response_body
@@ -173,8 +190,14 @@ async function mutateProjectAttribute(
       }
       const ids = parseProjectSkillSelection(body.data.installation_ids)
       let receipt: ProjectAttributeReceipt
-      if (rename && typeof body.data.name === "string") receipt = { data: { project_id: command.projectId, name: body.data.name } }
-      else if (!rename && ids !== null) receipt = { data: { project_id: command.projectId, installation_ids: ids } }
+      if (rename && typeof body.data.name === "string")
+        receipt = {
+          data: { project_id: command.projectId, name: body.data.name },
+        }
+      else if (!rename && ids !== null)
+        receipt = {
+          data: { project_id: command.projectId, installation_ids: ids },
+        }
       else throw new Error("PROJECT_RENAME_RECEIPT_INVALID")
       await commit()
       return { kind: "committed", receipt }
@@ -182,7 +205,7 @@ async function mutateProjectAttribute(
     if (JSON.stringify(rename ? project.name : project.selected_skill_installation_ids) !== JSON.stringify(value)) {
       const updated = await query(
         `UPDATE bff_project SET ${rename ? "name=$4" : "selected_skill_installation_ids=$4::text[]"},updated_at=CURRENT_TIMESTAMP(3)
-          WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL`,
+          WHERE tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectEditPredicate}`,
         [command.tenantId, command.subjectId, command.projectId, value],
       )
       if (updated.rowCount !== 1) throw new Error("PROJECT_RENAME_UPDATE_LOST")

@@ -1,0 +1,69 @@
+{
+  "profile": "skill-series-delete-v1",
+  "version": "1.0.0",
+  "owner": "Platform/Skills",
+  "status": "candidate",
+  "parent_commit": "97b27b3",
+  "parents": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-skill-series-delete-parent.proto.snapshot",
+      "sha256": "6a428a7f6e69102bafa19e3deaf460b1f85341e736caf569e3b8e9afb82166d0"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-skill-series-delete-parent.descriptor.snapshot",
+      "sha256": "3e695f87dee76712d7ef34685dc79f3e9e55c404f8eaa213f907e5bd8864445b"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-skill-series-delete-parent.generated.snapshot",
+      "sha256": "dd041ec89f368f70e145b9c6fe83c4b464154080db1a2a06a1b23eda7b50edf2"
+    }
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "4cf055deb6dca9c9739037a2431d827185703ef4e1e5611b63dd3fd43e410d96",
+    "contract/descriptor/platform-v1.binpb": "7925997178cfd047506423da2586eac087a4191fd1e0808f39e91d090ec2ea1a",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "22aaf5791966335fd9dedd0b120429eca2951518c24568083211f3ded0bfbc06"
+  },
+  "operation": "skill.delete_personal_series",
+  "method": "kokoro.platform.v1.SkillCatalogService/DeletePersonalSkillSeries",
+  "subject": "trusted BFF catalog workload x-kokoro-subject; no body identity",
+  "enum": {
+    "DELETED": 7
+  },
+  "terminal": true,
+  "storage_cascade": false,
+  "vectors": [
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "publisher",
+        "skillId": "skill-1",
+        "expectedStateVersion": "1",
+        "expectedPublication": null
+      },
+      "sha256": "e1c12cec3e81e98215f86b74b5b867eb048b29ae0bb7c50cbfac34b0a3532d88"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "publisher",
+        "skillId": "skill-1",
+        "expectedStateVersion": "2",
+        "expectedPublication": {
+          "currentVersionId": "skill-2",
+          "stateVersion": "7"
+        }
+      },
+      "sha256": "7f235b3a21108ccb0cd82f325be34fdcb54a4de7d8436fe80cabe5c792036b33"
+    },
+    {
+      "input": {
+        "tenantId": "tenant-1",
+        "subjectId": "other",
+        "skillId": "skill-1",
+        "expectedStateVersion": "1",
+        "expectedPublication": null
+      },
+      "sha256": "897f2d467daf0a0682acc50bb7984fc1546791066c2b6a432dba89382d2e275c"
+    }
+  ]
+}

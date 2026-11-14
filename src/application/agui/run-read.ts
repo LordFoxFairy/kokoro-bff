@@ -9,5 +9,5 @@ export type RunExecutionProcess = {
 
 export type RunProcessPage = RunExecutionProcess & { event_watermark: string }
 
-export type ChatExecutionHead = { runId: string; state: "queued" | "active" | "waiting" | "resuming"; pendingPauses: InteractionState[] }
+export type ChatExecutionHead = { canControl?: boolean; runId: string; state: "queued" | "active" | "waiting" | "resuming"; pendingPauses: InteractionState[] }
 export type ChatRunControlState = { executionHead?: ChatExecutionHead }

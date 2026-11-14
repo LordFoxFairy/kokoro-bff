@@ -43,8 +43,11 @@ test("Message actions SQL and operation inventory inverse reject unrelated or pa
   }
   const { operations } = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8"))
   assert.equal(messageActionsParentInventory(operations).length, 195)
+  assert.equal(operations.filter((item) => item.operation_id === "getMessageFeedback").length, 1)
   for (const bad of [
-    operations.slice(0, -1),
+    // A later optional release entry may validly disappear into its historical
+    // parent. Remove this proof's required message operation instead.
+    operations.filter((item) => item.operation_id !== "getMessageFeedback"),
     operations.map((item, i) => (i === 0 ? { ...item, path: "/wrong" } : item)),
     operations.map((item) => (item.operation_id === "setMessageFeedback" ? { ...item, method: "POST" } : item)),
   ])

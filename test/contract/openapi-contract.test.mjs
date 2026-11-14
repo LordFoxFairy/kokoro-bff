@@ -7,6 +7,7 @@ import { restorePublic151AccountProfileContract } from "../../scripts/account-pr
 import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
@@ -28,9 +29,178 @@ const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.me
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 
+test("Public28.38 adds one conditional nonempty draft PATCH and restores the exact complete Public28.37 parent", async () => {
+  const { load } = await import("js-yaml")
+  const { restoreProjectGrantContract, projectGrantParentBaseline } = await import("../../scripts/project-grant-public-contract.mjs")
+  const source = restoreProjectGrantContract(await readFile(currentOpenapiUrl, "utf8")),
+    current = load(source)
+  const operation = current.paths["/v1/admin/model-revisions/{revision_id}"]?.patch
+  assert.equal(operation?.operationId, "updateAdminModelRevisionDraft")
+  assert.equal(current.info.version, "28.38.0")
+  assert.equal(operation["x-kokoro-permission"], "admin.model_configuration.write")
+  assert.equal(operation["x-kokoro-idempotency"], "required")
+  assert.equal(operation.security, undefined, "uses unchanged native Session admission")
+  assert.ok(operation.parameters.some((p) => p.$ref === "#/components/parameters/AdminModelRoutingIdempotencyKey"))
+  assert.ok(operation.parameters.some((p) => p.name === "If-Match" && p.required === true))
+  assert.equal(operation.requestBody.required, true)
+  const schema = current.components.schemas.AdminModelRevisionDraftUpdate
+  const createProperties = current.components.schemas.AdminModelRevisionInput.properties
+  assert.equal(schema.additionalProperties, false)
+  assert.equal(schema.minProperties, 1)
+  assert.equal(schema.required, undefined)
+  assert.deepEqual(schema.properties, Object.fromEntries(Object.entries(createProperties).filter(([name]) => !["model_id", "revision"].includes(name))))
+  assert.deepEqual(Object.keys(operation.responses), ["200", "400", "401", "403", "404", "409", "428", "429", "502", "503"])
+  const { restorePublic2837ModelDraftContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const parent = restorePublic2837ModelDraftContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "737688c79fa4fad8216168656d0fe7e4131b496ef2b506e424dbff82d7dca2c8")
+  assert.equal(parseOpenApiOperations(source).length, 217)
+  assert.deepEqual(
+    parseOpenApiOperations(source).filter((op) => op.fields.get("operationId") !== "updateAdminModelRevisionDraft"),
+    parseOpenApiOperations(parent),
+  )
+  const inventory = projectGrantParentBaseline(JSON.parse(await readFile(baselineUrl, "utf8")).operations)
+  assert.equal(inventory.length, 217)
+  assert.deepEqual(inventory.at(-1), { method: "PATCH", path: "/v1/admin/model-revisions/{revision_id}", operation_id: "updateAdminModelRevisionDraft" })
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(inventory.slice(0, -1)))
+      .digest("hex"),
+    "205120d59460944e9d371b78e62cc1b505e2f250ed24c4c5ae142fb0742d2c39",
+  )
+  assert.throws(() => restorePublic2837ModelDraftContract(source + "\n"), /Public28.38 child drift/u)
+  assert.throws(() => restorePublic2837ModelDraftContract(source.replace("minProperties: 1", "minProperties: 0")), /Public28.38 child drift/u)
+})
+
+test("Public28.37 Team Skill permissions match the complete fixed IAM role catalog", async () => {
+  const { load } = await import("js-yaml")
+  const canonical = load(await readFile(currentOpenapiUrl, "utf8"))
+  const dependency = JSON.parse(await readFile(new URL("../../contract/dependencies/iam-http.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(
+    await readFile(new URL(`../../contract/vendor/kokoro-iam/${dependency.owner.repository_commit}/iam.internal.v1.json`, import.meta.url), "utf8"),
+  )
+  const permissionSchemas =
+    owner.paths["/internal/v1/tenants/{tenant_id}/roles"].get.responses["200"].content["application/json"].schema.properties.data.items.properties.permissions
+      .properties
+  const expected = permissionSchemas.skill.items.enum
+  assert.ok(expected.includes("delete_series"), "the fixed IAM owner has already published series deletion")
+  assert.deepEqual(canonical.components.schemas.TeamRole.properties.permissions.properties.skill.items.enum, expected)
+
+  // The fixed owner reader must preserve the complete catalog, not filter an action to fit stale public metadata.
+  const { zListTenantRolesResponse } = await import("../../src/generated/iam-http/zod.gen.ts")
+  const permissions = Object.fromEntries(Object.entries(permissionSchemas).map(([domain, schema]) => [domain, schema.items.enum]))
+  const page = {
+    data: ["owner", "admin"].map((name) => ({
+      role_id: null,
+      name,
+      kind: "builtin",
+      permissions: name === "owner" ? permissions : { ...permissions, ac: ["read"] },
+    })),
+    meta: { next_cursor: null },
+  }
+  assert.deepEqual(zListTenantRolesResponse.parse(page), page)
+  const unknownAction = structuredClone(page)
+  unknownAction.data[0].permissions.skill.push("unknown_action")
+  assert.equal(zListTenantRolesResponse.safeParse(unknownAction).success, false)
+  const unknownDomain = structuredClone(page)
+  unknownDomain.data[0].permissions.unknown_domain = ["read"]
+  const parsed = zListTenantRolesResponse.safeParse(unknownDomain)
+  // Generated Zod may strip unknown domains; the production reader also requires exact raw equality.
+  assert.equal(parsed.success && isDeepStrictEqual(parsed.data, unknownDomain), false)
+})
+
+test("Public28.37 adds Session Share metadata and the fixed owner Team permission while preserving its exact parent", async () => {
+  const { load } = await import("js-yaml")
+  const { restorePublic2837ModelDraftContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2837ModelDraftContract(await readFile(currentOpenapiUrl, "utf8")),
+    active = load(latest)
+  const path = active.paths["/v1/sessions/{id}/share"]
+  assert.equal(path.get?.operationId, "getSessionShareMetadata")
+  assert.equal(active.info.version, "28.37.0")
+  assert.equal(path.get["x-kokoro-idempotency"], "none")
+  assert.equal(path.get["x-kokoro-permission"], "chat.session.read")
+  assert.equal(path.get.security, undefined)
+  assert.deepEqual(path.get.parameters, path.post.parameters.slice(1))
+  const { SessionShareMetadata: metadata, SessionShareMetadataResponse: response } = active.components.schemas
+  assert.deepEqual(metadata.required, ["share_id", "created_at", "expires_at"])
+  assert.equal(metadata.additionalProperties, false)
+  assert.deepEqual(Object.keys(metadata.properties), metadata.required)
+  assert.deepEqual(response.properties.data.properties.share.oneOf, [{ $ref: "#/components/schemas/SessionShareMetadata" }, { type: "null" }])
+  assert.equal(response.additionalProperties, false)
+  assert.equal(response.properties.data.additionalProperties, false)
+  const { restorePublic2836SessionShareContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  assert.equal(
+    createHash("sha256").update(restorePublic2836SessionShareContract(latest)).digest("hex"),
+    "7f715f26aa93410514b3876804309e10049f6fc6cbfcbe50847b1ccbd800d434",
+  )
+  assert.throws(() => restorePublic2836SessionShareContract(latest + "\n"), /Public28.37 child drift/u)
+  for (const delta of ["", "delete_series, unknown_action, "]) {
+    const drift = latest.replace("create_version, delete_series, begin_upload", `create_version, ${delta}begin_upload`)
+    assert.notEqual(drift, latest)
+    assert.throws(() => restorePublic2836SessionShareContract(drift), /Public28.37 child drift/u)
+  }
+  const parent = restorePublic2836SessionShareContract(latest)
+  assert.deepEqual(
+    parseOpenApiOperations(latest).filter((operation) => operation.fields.get("operationId") !== "getSessionShareMetadata"),
+    parseOpenApiOperations(parent),
+    "Team metadata changes no operation and the Share addition retains the parent operation order",
+  )
+})
+
+test("current public authentication metadata follows native Session admission and preserves named exceptions", async () => {
+  const { load } = await import("js-yaml")
+  const active = load(await readFile(currentOpenapiUrl, "utf8"))
+  const native = ["issuerSessionCookie", "secureIssuerSessionCookie"].map((cookie) => ({
+    serviceHeader: [],
+    internalSecret: [],
+    [cookie]: [],
+    browserOrigin: [],
+  }))
+  assert.deepEqual(active.security, native, "ordinary Product operations describe native Session, not a user Bearer")
+  assert.equal(active.info.version, "29.1.0")
+  const operations = Object.values(active.paths).flatMap((path) =>
+    Object.values(path).filter((operation) => operation && typeof operation === "object" && operation.operationId),
+  )
+  assert.equal(operations.length, 228)
+  const serviceOnly = new Set(["getRuntimeManifest", "getSharedSessionSnapshot"])
+  const exceptions = new Map([
+    ["healthz", []],
+    ["readyz", []],
+    ["listSkills", [{ serviceHeader: [], internalSecret: [], userBearer: [] }]],
+    ["acceptTelegramConnectionUpdate", [{ TelegramWebhookSecret: [] }]],
+    ["acceptLineConnectionEvent", [{ LineWebhookSignature: [] }]],
+  ])
+  for (const operation of operations) {
+    assert.deepEqual(
+      operation.security ?? active.security,
+      exceptions.get(operation.operationId) ?? (serviceOnly.has(operation.operationId) ? [{ serviceHeader: [], internalSecret: [] }] : native),
+      operation.operationId,
+    )
+  }
+  assert.equal(active.components.securitySchemes.issuerSessionCookie.in, "cookie")
+  assert.equal(active.components.securitySchemes.issuerSessionCookie.name, "kokoro-issuer.session_token")
+  assert.equal(active.components.securitySchemes.secureIssuerSessionCookie.name, "__Secure-kokoro-issuer.session_token")
+  assert.equal(active.components.securitySchemes.browserOrigin.name, "Origin")
+  assert.match(active.components.securitySchemes.browserOrigin.description, /configured Web origin/u)
+  assert.match(active.components.securitySchemes.internalSecret.description, /never supplied to browser code/u)
+  assert.match(active.components.securitySchemes.userBearer.description, /User API Key.*OpenApp/u)
+  assert.doesNotMatch(active.paths["/v1/me"].get.description, /user Bearer/u)
+})
+
+test("Public28.36 metadata change restores the exact Public28.35 parent and rejects child drift", async () => {
+  const { restorePublic2835NativeSessionContract, restorePublic2836SessionShareContract } =
+    await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2836SessionShareContract(await readFile(currentOpenapiUrl, "utf8"))
+  assert.equal(
+    createHash("sha256").update(restorePublic2835NativeSessionContract(latest)).digest("hex"),
+    "a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f",
+  )
+  assert.throws(() => restorePublic2835NativeSessionContract(latest + "\n"), /Public28.36 child drift/u)
+})
+
 test("Public28.35 models Slack installation completion without exposing a credential", async () => {
   const { load } = await import("js-yaml")
-  const latest = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic2835NativeSessionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const latest = restorePublic2835NativeSessionContract(await readFile(currentOpenapiUrl, "utf8"))
   const active = load(latest)
   assert.equal(active.info.version, "28.35.0")
   const complete = active.paths["/v1/agents/connections/slack/complete"].post
@@ -45,16 +215,20 @@ test("Public28.35 models Slack installation completion without exposing a creden
   assert.deepEqual(Object.keys(receipt.properties.data.properties), ["platform", "status", "state_version", "connected_at"])
   assert.equal(receipt.properties.data.properties.platform.const, "slack")
   const [start, wait] = ["awaiting_slack", "awaiting_slack_callback"].map((status) =>
-    AgentConnectionSetup.oneOf.find((arm) => arm.properties.status.const === status))
+    AgentConnectionSetup.oneOf.find((arm) => arm.properties.status.const === status),
+  )
   assert.ok(start.required.includes("continue_url"))
   assert.equal(wait.properties.continue_url, undefined)
 })
 
 test("Public28.34 separates LINE callbacks and admitted continuation, preserving exact parents", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2834SlackConnectionContract, restorePublic2833LineConnectionContract,
-    restorePublic2832WorkspaceOutputsContract, restorePublic2831AgentConnectionContract } =
-    await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const {
+    restorePublic2834SlackConnectionContract,
+    restorePublic2833LineConnectionContract,
+    restorePublic2832WorkspaceOutputsContract,
+    restorePublic2831AgentConnectionContract,
+  } = await import("../../scripts/library-file-deletion-public-contract.mjs")
   const latest = restorePublic2834SlackConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
   const line = load(latest)
   assert.equal(line.info.version, "28.34.0")
@@ -62,7 +236,7 @@ test("Public28.34 separates LINE callbacks and admitted continuation, preserving
   assert.equal(line.components.securitySchemes.LineWebhookSignature.name, "X-Line-Signature")
   assert.equal(line.paths["/v1/agents/connections/line/continue"].post.security, undefined)
   assert.equal(line.components.schemas.LineConnectionContinueRequest.properties.link_token.writeOnly, true)
-  const lineCallback = line.components.schemas.AgentConnectionSetup.oneOf.find(arm => arm.properties.status.const === "awaiting_line_callback")
+  const lineCallback = line.components.schemas.AgentConnectionSetup.oneOf.find((arm) => arm.properties.status.const === "awaiting_line_callback")
   assert.deepEqual(lineCallback.required, ["platform", "status", "state_version", "setup_id", "expires_at"])
   const child = restorePublic2833LineConnectionContract(latest)
   const active = load(child)
@@ -86,21 +260,22 @@ test("Public28.34 separates LINE callbacks and admitted continuation, preserving
   assert.deepEqual(callback.security, [{ TelegramWebhookSecret: [] }])
   assert.equal(components.securitySchemes.TelegramWebhookSecret.name, "X-Telegram-Bot-Api-Secret-Token")
   assert.ok(callback.responses[204])
-  const commands = Object.fromEntries(components.schemas.AgentConnectionCommand.oneOf.map(row => [row.properties.action.const, row]))
+  const commands = Object.fromEntries(components.schemas.AgentConnectionCommand.oneOf.map((row) => [row.properties.action.const, row]))
   assert.deepEqual(Object.keys(commands), ["start", "cancel", "confirm", "disconnect"])
-  assert.ok(Object.values(commands).every(row => row.additionalProperties === false))
+  assert.ok(Object.values(commands).every((row) => row.additionalProperties === false))
   assert.equal(commands.confirm.properties.proof.writeOnly, true)
   assert.deepEqual(commands.cancel.required, ["action", "expected_state_version", "setup_id"])
-  const states = Object.fromEntries(components.schemas.AgentConnectionSetup.oneOf.map(row => [row.properties.status.const, row]))
+  const states = Object.fromEntries(components.schemas.AgentConnectionSetup.oneOf.map((row) => [row.properties.status.const, row]))
   assert.deepEqual(Object.keys(states), ["disconnected", "awaiting_telegram", "awaiting_confirmation", "expired", "connected"])
-  assert.ok(Object.values(states).every(row => row.additionalProperties === false && !row.properties.proof && !row.properties.qr_value))
+  assert.ok(Object.values(states).every((row) => row.additionalProperties === false && !row.properties.proof && !row.properties.qr_value))
   assert.ok(states.awaiting_telegram.properties.continue_url)
   assert.ok(!states.awaiting_confirmation.properties.continue_url && !states.connected.properties.expires_at)
 })
 
 test("Public28.31 adds only the closed owned Project website GET and conditional natural PUT", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2830ProjectWebsitesContract, restorePublic2831AgentConnectionContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const { restorePublic2830ProjectWebsitesContract, restorePublic2831AgentConnectionContract } =
+    await import("../../scripts/library-file-deletion-public-contract.mjs")
   const source = restorePublic2831AgentConnectionContract(await readFile(currentOpenapiUrl, "utf8"))
   const { info, paths, components } = load(source)
   const route = "/v1/projects/{project_id}/websites"
@@ -133,7 +308,8 @@ test("Public28.31 adds only the closed owned Project website GET and conditional
 
 test("Public28.30 shares one optional Artifact display path domain only between private snapshot and existing AG-UI delivery", async () => {
   const { load } = await import("js-yaml")
-  const { restorePublic2829DeliveryDisplayPathContract, restorePublic2830ProjectWebsitesContract } = await import("../../scripts/library-file-deletion-public-contract.mjs")
+  const { restorePublic2829DeliveryDisplayPathContract, restorePublic2830ProjectWebsitesContract } =
+    await import("../../scripts/library-file-deletion-public-contract.mjs")
   const source = restorePublic2830ProjectWebsitesContract(await readFile(currentOpenapiUrl, "utf8"))
   const { info, paths, components } = load(source)
   const s = components.schemas
@@ -3020,7 +3196,11 @@ test("Project Todo publishes scoped, conditional and replayable writes on its ex
   assert.equal(member?.patch.operationId, "updateProjectTask")
   assert.equal(member?.delete.operationId, "deleteProjectTask")
   assert.ok(document.components.schemas.Task.required.includes("revision"))
-  for (const [operation, status] of [[collection.post, "201"], [member.patch, "200"], [member.delete, "204"]]) {
+  for (const [operation, status] of [
+    [collection.post, "201"],
+    [member.patch, "200"],
+    [member.delete, "204"],
+  ]) {
     assert.equal(operation["x-kokoro-permission"], "project.write")
     assert.ok(operation.parameters.some(({ $ref }) => $ref === "#/components/parameters/ProjectTaskIdempotencyKey"))
     assert.ok(operation.responses[status])

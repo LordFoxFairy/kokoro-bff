@@ -16,7 +16,7 @@ const root = new URL("../", import.meta.url)
 const commit = "845cf46b7b156c9bacf1065384830c12279e2b5b"
 const digest = "77792d3b31446a70adf25693bdea4bd9ebfd39f3b77c6816bc324591827ca758"
 
-test("System HTTP6 model configuration client pins reviewed owner bytes and sixteen operations", async () => {
+test("System HTTP6 model configuration client pins reviewed owner bytes and seventeen operations", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/system-http.json", root), "utf8"))
   const source = await readFile(new URL(`contract/vendor/kokoro-system/${commit}/system.openapi.json`, root))
   const api = JSON.parse(source)
@@ -51,6 +51,7 @@ test("System HTTP6 model configuration client pins reviewed owner bytes and sixt
       "publishModelRevision",
       "putRoutingPolicy",
       "updateModelLabel",
+      "updateModelRevisionDraft",
     ].sort(),
   )
   assert.equal(createHash("sha256").update(source).digest("hex"), digest)

@@ -1,3 +1,38 @@
+## Current release — Public29.1 / 228 operations
+
+Adds one current-tenant native-admin IAM audit read. The named inverse restores complete Public29.0/227 bytes and ordered inventory before the existing historical proofs. IAM is fixed to 814ba4c4/0.22 via the existing generator. No Schema or authentication protocol is added; normal native pairing remains a separate Root receipt. Private MCP feature publications retain their independently issued 573 source: the generator proves runtime feature bytes match instead of floating their provenance or re-signing artifacts. Earlier sections describe earlier checkpoints.
+
+## B13 — Public29.1 current-tenant IAM audit candidate
+
+Adds exactly `GET /v1/admin/identity/audit-events` / `listAdminIdentityAuditEvents` (228 ordered operations). It accepts only limit/cursor and returns the IAM-owned safe page, not a cross-owner audit store. The new build/test inverse restores the complete released Public29 bytes (`45c54365e75a31684e1dbf841a0c68cd554bf022643919cac591c78ed4499509`) and ordered 227-operation inventory before the unchanged historical guards. No old digest, SQL or independent browser-private profile is re-signed.
+
+IAM 0.22.0 is consumed from formal `814ba4c423b631cab28929048c7203f2d14822fc`, raw `fe0f70f60776e74dc6795f460c4c78010aba7549bf9f6b63e8daae99e035c482`, through the existing generated client pipeline. BFF does not generate an SDK from its own public canonical. Publication, consumer pins and normal native acceptance remain Root's subsequent steps.
+
+## Current candidate — Public29.0 / 227 operations
+
+未发行候选；B10 同版 221 operations 补全 current control/regeneration 安全事实（未发行），新增六项 Custom API admin。独立 `scripts/custom-api-admin-public-contract.mjs` 精确恢复修正后 221 中间态，再由原 B10 guard 恢复已发行 Public28.38 / 217 全文；不重签历史 parent。机器入口仍 canonical OpenAPI 与有序 operation inventory，版本不产生未发行的 28.39。Platform 固定 `efe18a1f697f3ff2189e342e40ffed581bedda2b`，仅消费正式六 RPC，public 与正常组合激活验收分开。以下为历史发布记录。
+
+## B13 — Public28.38 model revision draft correction
+
+One named conditional `PATCH /v1/admin/model-revisions/{revision_id}` projects the already pinned System6.1 draft update. The 217-operation inventory appends one entry without reordering the previous 216; the existing baseline writer sorts by canonical placement, so this release retains the ordered parent inventory and adds only the new identity. Tests verify its exact parent-array digest and the complete Public28.37 OpenAPI inverse. Historical hashes and checks stay unchanged. System generation expands the existing filter by one operation, preserving the exact owner commit/digest; no public SDK, independent private artifact, Schema or auth protocol changes.
+
+## B-T3 — Public 28.37 owned Session Share metadata
+
+One native-Session GET reads current safe metadata from the existing Chat owner. Unshared, revoked and expired visible
+sessions return `share:null`; inaccessible sessions return the same 404. GET does not create a receipt, repair expiry or
+write facts. POST/DELETE and service-only shared snapshots are unchanged. The current 216-operation inventory retains
+the prior 215 entries in their original order; the added operation is derived from canonical parsing. Build/test inverse
+restores complete Public 28.36 bytes; previous raw artifacts and proofs are not edited. No owner client or private profile changes.
+
+## B-T3 — Public 28.36 native Session metadata
+
+This release corrects authentication descriptions to match the existing runtime; all 215 operations retain their exact
+identity and order. `openapi/v1/openapi.yaml` remains the sole editable public artifact. The existing build/test inverse
+restores complete Public 28.35 bytes (`a26431d45ad96c4e80e6751d61e66a14b3933ae7c2ffb6f9e7df57fcc7e6808f`)
+and rejects child drift. This repository has no generated SDK derived from its own public canonical: owner-client and
+independent browser-private generation inputs do not change. Consumers must pin the new owner publication and use their
+normal generators; no historical proof or runtime fallback is introduced. No Schema, migration or data reset belongs to this release.
+
 ## A‑13 — Public 28.35 Slack completion
 
 The current setup adds Slack states and one admitted, single-use completion. Only pre-claim setup has the official Slack authorization URL; the credential-free success receipt is the ordinary connected state. The build-time inverse restores exact Public 28.34 bytes. LINE and Telegram wire are unchanged.
@@ -373,9 +408,18 @@ IAM 私有 allowlist/snapshot 不在 BFF vendoring。BFF 的本地门只证明 p
 Every operation in `openapi/v1/openapi.yaml` is classified as `public`. Browser code still reaches it through the
 `kokoro` same-origin server adapter; `public` describes product-contract visibility and does not expose BFF service
 credentials to a browser. Health and readiness operations use the `anonymous` permission marker. Business operations
-declare a stable permission identifier and normally require the trusted `web-bff` service envelope plus an IAM-verified
-user Bearer. Share and runtime manifest explicitly override the top-level user Bearer requirement with service-only
-security; an irrelevant extra Authorization header does not become an additional credential requirement.
+declare a stable permission identifier. Ordinary Product operations require the trusted Web/Admin server adapter service
+envelope AND the configured native IAM Session cookie AND exact configured Web Origin at the BFF boundary. Browser
+code calls only its same-origin adapter: it never receives an internal service secret or calls BFF directly. IAM verifies
+the Session and current fixed-tenant Product eligibility; ordinary internal business calls carry service identity and the
+trusted actor, not the user's Cookie, Origin, Bearer or Session reference. Plain and Secure cookie security alternatives
+express different configured deployment modes, not a runtime fallback. The Origin header is an admission precondition,
+not an identity credential.
+
+Explicit operation overrides remain authoritative: health/readiness are anonymous; Share and runtime manifest are
+service-only; `GET /v1/skill.list` alone uses the independent IAM User API Key/OpenApp Bearer inside the trusted service
+envelope; Telegram and LINE callbacks use their own provider secret/signature. An irrelevant extra Authorization header
+does not change a service-only operation's credential requirements.
 
 ## Version
 

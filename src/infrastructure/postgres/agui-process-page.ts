@@ -135,19 +135,20 @@ async function processAt(
             event.cursor AS frame_cursor,event.source_owner AS frame_source_owner,event.source_event_id AS frame_source_event_id,
             COALESCE(event.event_payload->>'runId',event.event_payload #>> '{metadata,kokoro,run_id}') AS frame_run_id,
             event.source_occurred_at AS frame_source_occurred_at,
-            stream.source_high_watermark,stream.retention_floor_sequence,
+            source_cursor.source_high_watermark,stream.retention_floor_sequence,
             EXISTS (SELECT 1 FROM bff_agui_cursor_tombstone AS tombstone
               WHERE tombstone.tenant_id=process.tenant_id AND tombstone.session_id=process.session_id
                 AND tombstone.cursor=process.start_public_cursor AND tombstone.public_sequence=process.start_public_sequence) AS start_tombstoned
        FROM bff_agui_run_process AS process
        JOIN bff_agui_stream AS stream ON stream.tenant_id=process.tenant_id AND stream.session_id=process.session_id
-        AND stream.consumer_subject_id=process.subject_id
+       JOIN bff_agui_source_cursor source_cursor ON source_cursor.tenant_id=process.tenant_id AND source_cursor.session_id=process.session_id
+         AND source_cursor.source_owner='kokoro-agent' AND source_cursor.subject_id=process.subject_id
        LEFT JOIN bff_agui_source_event AS source
          ON source.tenant_id=process.tenant_id AND source.session_id=process.session_id
-        AND source.source_owner=process.start_source_owner AND source.source_event_id=process.start_source_event_id
+        AND source.source_owner=process.start_source_owner AND source.source_event_id=process.start_source_event_id AND source.source_subject_id=process.subject_id
        LEFT JOIN bff_agui_event AS event
          ON event.tenant_id=process.tenant_id AND event.session_id=process.session_id
-        AND event.public_sequence=process.start_public_sequence AND event.cursor=process.start_public_cursor
+        AND event.source_subject_id=process.subject_id AND event.public_sequence=process.start_public_sequence AND event.cursor=process.start_public_cursor
         AND event.event_type='RUN_STARTED'
       WHERE process.tenant_id=$1 AND process.session_id=$2 AND process.subject_id=$3
         AND process.start_public_sequence<=$4 AND ($5::text IS NULL OR process.run_id=$5)
@@ -196,10 +197,10 @@ async function todosAt(client: PoolClient, tenantId: string, sessionId: string, 
     source_high_watermark: string
   }>(
     `SELECT process.todo_observed,process.todos,process.todo_digest,process.todo_source_event_id,process.todo_source_sequence,
-            process.todo_public_sequence,process.todo_public_cursor,stream.source_high_watermark,
+            process.todo_public_sequence,process.todo_public_cursor,source_cursor.source_high_watermark,
             EXISTS (SELECT 1 FROM bff_agui_event AS frame JOIN bff_agui_source_event AS source
-              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id
-             AND source.source_owner=process.todo_source_owner AND source.source_event_id=process.todo_source_event_id
+              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id AND source.source_subject_id=frame.source_subject_id
+             AND source.source_owner=process.todo_source_owner AND source.source_event_id=process.todo_source_event_id AND source.source_subject_id=process.subject_id
              AND source.source_sequence=process.todo_source_sequence AND source.source_digest=process.todo_source_digest
              AND source.source_occurred_at=process.todo_source_occurred_at
              AND frame.source_occurred_at=source.source_occurred_at
@@ -213,6 +214,8 @@ async function todosAt(client: PoolClient, tenantId: string, sessionId: string, 
             latest.source_event_id AS latest_source_event_id,latest.event_payload->'value'->'todos' AS latest_value
        FROM bff_agui_run_process AS process
        JOIN bff_agui_stream AS stream ON stream.tenant_id=process.tenant_id AND stream.session_id=process.session_id
+       JOIN bff_agui_source_cursor source_cursor ON source_cursor.tenant_id=process.tenant_id AND source_cursor.session_id=process.session_id
+         AND source_cursor.source_owner='kokoro-agent' AND source_cursor.subject_id=process.subject_id
        LEFT JOIN LATERAL (
          SELECT event.public_sequence,event.cursor,event.source_event_id,event.event_payload
            FROM bff_agui_event AS event
@@ -256,7 +259,7 @@ async function todosAt(client: PoolClient, tenantId: string, sessionId: string, 
     `SELECT event.event_payload->'value'->'todos' AS value,event.public_sequence,event.cursor,
             EXISTS (SELECT 1 FROM bff_agui_source_event AS source
               WHERE source.tenant_id=event.tenant_id AND source.session_id=event.session_id
-                AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id
+                AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id AND source.source_subject_id=event.source_subject_id
                 AND source.source_occurred_at=event.source_occurred_at) AS source_valid
        FROM bff_agui_event AS event
       WHERE event.tenant_id=$1 AND event.session_id=$2 AND event.public_sequence<=$4
@@ -287,10 +290,10 @@ async function validateActivityProvenance(client: PoolClient, tenantId: string, 
             activity.first_source_sequence,activity.latest_source_sequence,
             activity.first_public_sequence,activity.first_public_cursor,
             activity.latest_public_sequence,activity.latest_public_cursor,activity.latest_source_event_id,
-            stream.source_high_watermark,
+            source_cursor.source_high_watermark,
             EXISTS (SELECT 1 FROM bff_agui_event AS frame JOIN bff_agui_source_event AS source
-              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id
-             AND source.source_owner=activity.first_source_owner AND source.source_event_id=activity.first_source_event_id
+              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id AND source.source_subject_id=frame.source_subject_id
+             AND source.source_owner=activity.first_source_owner AND source.source_event_id=activity.first_source_event_id AND source.source_subject_id=activity.subject_id
              AND source.source_sequence=activity.first_source_sequence AND source.source_digest=activity.first_source_digest
              AND source.source_occurred_at=activity.first_source_occurred_at
              AND frame.source_occurred_at=source.source_occurred_at
@@ -301,8 +304,8 @@ async function validateActivityProvenance(client: PoolClient, tenantId: string, 
                AND COALESCE(frame.event_payload->>'runId',frame.event_payload #>> '{metadata,kokoro,run_id}')=activity.run_id
                AND frame.event_payload #>> '{value,activity_id}'=activity.activity_id) AS first_valid,
             EXISTS (SELECT 1 FROM bff_agui_event AS frame JOIN bff_agui_source_event AS source
-              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id
-             AND source.source_owner=activity.latest_source_owner AND source.source_event_id=activity.latest_source_event_id
+              ON source.tenant_id=frame.tenant_id AND source.session_id=frame.session_id AND source.source_subject_id=frame.source_subject_id
+             AND source.source_owner=activity.latest_source_owner AND source.source_event_id=activity.latest_source_event_id AND source.source_subject_id=activity.subject_id
              AND source.source_sequence=activity.latest_source_sequence AND source.source_digest=activity.latest_source_digest
              AND source.source_occurred_at=activity.latest_source_occurred_at
              AND frame.source_occurred_at=source.source_occurred_at
@@ -317,6 +320,8 @@ async function validateActivityProvenance(client: PoolClient, tenantId: string, 
             latest.source_event_id AS latest_ledger_source_event_id,latest.event_payload->'value' AS latest_ledger_payload
        FROM bff_agui_run_activity AS activity
        JOIN bff_agui_stream AS stream ON stream.tenant_id=activity.tenant_id AND stream.session_id=activity.session_id
+       JOIN bff_agui_source_cursor source_cursor ON source_cursor.tenant_id=activity.tenant_id AND source_cursor.session_id=activity.session_id
+         AND source_cursor.source_owner='kokoro-agent' AND source_cursor.subject_id=activity.subject_id
        LEFT JOIN LATERAL (
          SELECT event.public_sequence,event.cursor,event.source_event_id,event.event_payload
            FROM bff_agui_event AS event
@@ -362,7 +367,7 @@ async function validateActivityProvenance(client: PoolClient, tenantId: string, 
        AND COALESCE(event.event_payload->>'runId',event.event_payload #>> '{metadata,kokoro,run_id}')=$3
        AND (activity.activity_id IS NULL OR NOT EXISTS (SELECT 1 FROM bff_agui_source_event AS source
          WHERE source.tenant_id=event.tenant_id AND source.session_id=event.session_id
-           AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id
+           AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id AND source.source_subject_id=event.source_subject_id
            AND source.source_occurred_at=event.source_occurred_at)) LIMIT 1`,
     [tenantId, sessionId, runId],
   )
@@ -386,8 +391,9 @@ export async function readRunProcessPage(
   if (process === null) {
     const orphan = await client.query(
       `SELECT 1 FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND public_sequence<=$3 AND event_type='RUN_STARTED'
+        AND source_subject_id=$5
         AND ($4::text IS NULL OR COALESCE(event_payload->>'runId',event_payload #>> '{metadata,kokoro,run_id}')=$4) LIMIT 1`,
-      [input.tenantId, input.sessionId, anchor, input.runId ?? null],
+      [input.tenantId, input.sessionId, anchor, input.runId ?? null, input.subjectId],
     )
     if (orphan.rows[0] !== undefined) throw new ProcessProjectionUnavailableError()
     return null
@@ -398,7 +404,7 @@ export async function readRunProcessPage(
        SELECT event.public_sequence,event.cursor,event.event_payload->'value' AS safe_payload,
               EXISTS (SELECT 1 FROM bff_agui_source_event AS source
                 WHERE source.tenant_id=event.tenant_id AND source.session_id=event.session_id
-                  AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id
+                  AND source.source_owner=event.source_owner AND source.source_event_id=event.source_event_id AND source.source_subject_id=event.source_subject_id
                   AND source.source_occurred_at=event.source_occurred_at) AS source_valid,
               event.event_payload #>> '{value,activity_id}' AS activity_id
          FROM bff_agui_event AS event
@@ -419,14 +425,14 @@ export async function readRunProcessPage(
             compact.activity_id AS compact_activity_id,compact.first_public_sequence::text AS compact_first_sequence,
             compact.latest_public_sequence::text AS compact_latest_sequence,compact.safe_payload AS compact_payload,compact.payload_digest AS compact_digest,
             EXISTS (SELECT 1 FROM bff_agui_event AS first_frame JOIN bff_agui_source_event AS first_source
-              ON first_source.tenant_id=first_frame.tenant_id AND first_source.session_id=first_frame.session_id
+              ON first_source.tenant_id=first_frame.tenant_id AND first_source.session_id=first_frame.session_id AND first_source.source_subject_id=first_frame.source_subject_id AND first_source.source_subject_id=compact.subject_id
              AND first_source.source_owner=compact.first_source_owner AND first_source.source_event_id=compact.first_source_event_id
              AND first_source.source_sequence=compact.first_source_sequence AND first_source.source_digest=compact.first_source_digest
              WHERE first_frame.tenant_id=compact.tenant_id AND first_frame.session_id=compact.session_id
                AND first_frame.public_sequence=compact.first_public_sequence AND first_frame.cursor=compact.first_public_cursor
                AND first_frame.source_owner=compact.first_source_owner AND first_frame.source_event_id=compact.first_source_event_id) AS compact_first_valid,
             EXISTS (SELECT 1 FROM bff_agui_event AS latest_frame JOIN bff_agui_source_event AS latest_source
-              ON latest_source.tenant_id=latest_frame.tenant_id AND latest_source.session_id=latest_frame.session_id
+              ON latest_source.tenant_id=latest_frame.tenant_id AND latest_source.session_id=latest_frame.session_id AND latest_source.source_subject_id=latest_frame.source_subject_id AND latest_source.source_subject_id=compact.subject_id
              AND latest_source.source_owner=compact.latest_source_owner AND latest_source.source_event_id=compact.latest_source_event_id
              AND latest_source.source_sequence=compact.latest_source_sequence AND latest_source.source_digest=compact.latest_source_digest
              WHERE latest_frame.tenant_id=compact.tenant_id AND latest_frame.session_id=compact.session_id

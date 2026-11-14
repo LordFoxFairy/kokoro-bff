@@ -36,7 +36,7 @@ async function waitForIo<T>(operation: Promise<T>, signal?: AbortSignal, deadlin
 export class PlatformServiceCredentialSource {
   constructor(
     private readonly path: string,
-    private readonly purpose: "catalog" | "skills_admin" | "projection" | "mcp_personal" | "mcp_admin" | "custom_api_personal",
+    private readonly purpose: "catalog" | "skills_admin" | "projection" | "mcp_personal" | "mcp_admin" | "custom_api_personal" | "custom_api_admin",
     private readonly opener: (path: string, flags: number) => Promise<CredentialHandle> = open,
   ) {}
   async get(tenantId: string, signal?: AbortSignal, deadlineAt?: number): Promise<string> {

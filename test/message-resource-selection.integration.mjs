@@ -30,6 +30,7 @@ integration(
       sourceConversation = "session-source",
       sha = "a".repeat(64)
     const calls = []
+    let expectedStorageSubject = subjectId
     let afterRead = async () => undefined
     let scan = ScanState.CLEAN
     let artifactFailure
@@ -56,9 +57,9 @@ integration(
         [conversationId, sourceConversation, tenantId, subjectId, projectId],
       )
       await pool.query(
-        `INSERT INTO bff_conversation_artifact(tenant_id,conversation_id,artifact_id,run_id,source_event_id,source_sequence,source_digest,source_asset_id,source_artifact_kind,source_content_sha256,source_title,source_mime,source_size_bytes,delivered_at)
-      VALUES($1,$2,'artifact-old','source-run','delivery',1,$3,'asset-final','document',$3,'Final','text/plain',5,CURRENT_TIMESTAMP)`,
-        [tenantId, sourceConversation, sha],
+        `INSERT INTO bff_conversation_artifact(tenant_id,conversation_id,artifact_id,run_id,source_event_id,source_sequence,source_subject_id,source_digest,source_asset_id,source_artifact_kind,source_content_sha256,source_title,source_mime,source_size_bytes,delivered_at)
+      VALUES($1,$2,'artifact-old','source-run','delivery',1,$4,$3,'asset-final','document',$3,'Final','text/plain',5,CURRENT_TIMESTAMP)`,
+        [tenantId, sourceConversation, sha, subjectId],
       )
       owner = createServer(
         connectNodeAdapter({
@@ -80,6 +81,7 @@ integration(
                 return { ...metadata, assetId: request.assetId, scanState: scan }
               },
               async getFinalArtifact(request, context) {
+                assert.equal(context.requestHeader.get("x-kokoro-subject-id"), expectedStorageSubject)
                 calls.push(["artifact", request.artifactId])
                 assert.equal(context.requestHeader.get("x-kokoro-scope-kind"), "conversation")
                 assert.equal(context.requestHeader.get("x-kokoro-scope-id"), sourceConversation)
@@ -255,12 +257,12 @@ integration(
           }
         }
       })
-      await t.test("foreign source ownership and another source Project fail before any owner metadata read", async () => {
+      await t.test("peer private source and another source Project fail before any owner metadata read", async () => {
         const before = await count(),
           reads = calls.length
         await pool.query("UPDATE bff_conversation SET project_ref=$1 WHERE conversation_id=$2", [otherProjectId, sourceConversation])
         await assert.rejects(service.submit(input("cross-project", [{ kind: "artifact", resource_id: "artifact-old" }])), /CHAT_RESOURCE_SELECTION_INVALID/)
-        await pool.query("UPDATE bff_conversation SET project_ref=$1,owner_id='foreign' WHERE conversation_id=$2", [projectId, sourceConversation])
+        await pool.query("UPDATE bff_conversation SET project_ref=NULL,owner_id='foreign' WHERE conversation_id=$1", [sourceConversation])
         await assert.rejects(service.submit(input("foreign", [{ kind: "artifact", resource_id: "artifact-old" }])), /CHAT_RESOURCE_SELECTION_INVALID/)
         assert.equal(calls.length, reads)
         assert.equal(await count(), before)
@@ -358,6 +360,77 @@ integration(
         assert.deepEqual(await service.submit(request), accepted)
         await assert.rejects(service.submit({ ...request, requestId: "fresh-final", idempotencyKey: "fresh-final" }), /CHAT_RESOURCE_SELECTION_INVALID/)
         assert.equal(calls.length, mixedReads)
+      })
+      await t.test("shared Project editor freezes peer confirmed FINAL and Artifact under their own actor, then rechecks edit and source scope", async () => {
+        const editor = "editor",
+          history = "answer-source-session",
+          message = "assistant-source"
+        const targets = ["shared-input", "shared-input-denied", "shared-input-moved", "shared-input-private"]
+        await pool.query("INSERT INTO bff_project_grant(tenant_id,project_id,subject_id,grant_role,granted_by) VALUES($1,$2,$3,'editor',$4)", [
+          tenantId,
+          projectId,
+          editor,
+          subjectId,
+        ])
+        for (const id of targets)
+          await pool.query("INSERT INTO bff_conversation(conversation_id,tenant_id,owner_id,project_ref,title) VALUES($1,$2,$3,$4,'Shared input')", [
+            id,
+            tenantId,
+            subjectId,
+            projectId,
+          ])
+        await pool.query(
+          "UPDATE bff_conversation SET owner_id='peer-creator',project_ref=$1,status='active',deleted_at=NULL WHERE tenant_id=$2 AND conversation_id=ANY($3::text[])",
+          [projectId, tenantId, [sourceConversation, history]],
+        )
+        expectedStorageSubject = editor
+        const selected = [
+          { kind: "artifact", resource_id: "artifact-old" },
+          { kind: "final_answer", resource_id: message },
+        ]
+        const request = (key, target, refs = selected) => ({ ...input(key, refs), subjectId: editor, actorId: editor, conversationId: target })
+        const accepted = await service.submit(request("shared-source", targets[0]))
+        assert.ok(accepted)
+        const launch = (await payload(accepted.run_id)).launch
+        const [artifact, answer] = launch.selected_resource_refs
+        assert.deepEqual(artifact, manifest[2], "Artifact retains its original source, never re-owned or copied")
+        assert.equal(answer.source_scope.id, history)
+        assert.equal(answer.source_run_id, "answer-source-run")
+        assert.equal(answer.content, "  Exact e\u0301 🧪\nfinal answer\n")
+        const dispatch = (
+          await pool.query("SELECT subject_id,actor_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND run_id=$2", [tenantId, accepted.run_id])
+        ).rows[0]
+        assert.deepEqual(dispatch, { subject_id: editor, actor_id: editor })
+        const before = await count()
+        afterRead = async () => {
+          await pool.query("UPDATE bff_project_grant SET grant_role='viewer' WHERE tenant_id=$1 AND project_id=$2 AND subject_id=$3", [
+            tenantId,
+            projectId,
+            editor,
+          ])
+        }
+        await assert.rejects(service.submit(request("shared-late-downgrade", targets[1])), /CHAT_TURN_PROJECT_FORBIDDEN/)
+        assert.equal(await count(), before)
+        await pool.query("UPDATE bff_project_grant SET grant_role='editor' WHERE tenant_id=$1 AND project_id=$2 AND subject_id=$3", [
+          tenantId,
+          projectId,
+          editor,
+        ])
+        afterRead = async () => {
+          await pool.query("UPDATE bff_conversation SET project_ref=$1 WHERE tenant_id=$2 AND conversation_id=$3", [
+            otherProjectId,
+            tenantId,
+            sourceConversation,
+          ])
+        }
+        await assert.rejects(service.submit(request("shared-source-moved", targets[2])), /CHAT_RESOURCE_SELECTION_INVALID|CHAT_RESOURCE_SELECTION_CHANGED/)
+        assert.equal(await count(), before)
+        afterRead = async () => undefined
+        await pool.query("UPDATE bff_conversation SET project_ref=NULL WHERE tenant_id=$1 AND conversation_id=$2", [tenantId, history])
+        const reads = calls.length
+        await assert.rejects(service.submit(request("shared-peer-private", targets[3], [selected[1]])), /CHAT_RESOURCE_SELECTION_INVALID/)
+        assert.equal(await count(), before)
+        assert.equal(calls.length, reads, "final-only never falls back to Storage or the peer's identity")
       })
     } finally {
       await module?.close()

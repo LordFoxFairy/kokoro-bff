@@ -27,8 +27,7 @@ export async function projectResourceReadRoute(
   assetId: string,
   download: boolean,
   store: ProjectResourceProjectReader | null,
-  clientFactory: ProjectResourceReadClientFactory = (cfg, scope) =>
-    new ProjectResourceAccessClient(cfg, scope),
+  clientFactory: ProjectResourceReadClientFactory = (cfg, scope) => new ProjectResourceAccessClient(cfg, scope),
   spooler: typeof spoolVerifiedArtifact = spoolVerifiedArtifact,
 ): Promise<void> {
   const abort = new AbortController()
@@ -60,6 +59,7 @@ export async function projectResourceReadRoute(
     const item = await client.get(assetId, admission)
     admission.throwIfAborted()
     if (!download) {
+      if ((await currentResourceProject(store, scope, projectId, admission)) !== projectId) throw new ProjectResourceError("project_not_found", 404)
       if (!response.destroyed) send(response, 200, ok({ resource: item }, context.requestId))
       return
     }

@@ -356,12 +356,15 @@ test("machine credentials never replace the current session and fresh Skills adm
             delete headers["content-type"]
             delete headers["idempotency-key"]
           }
+          headers["x-kokoro-request-id"] = "admin-denial-correlation"
           const response = await fetch(`${app.base}${path}`, {
             method,
             headers,
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           })
           assert.equal(response.status, 403)
+          assert.equal(response.headers.get("x-request-id"), "admin-denial-correlation")
+          assert.equal(response.headers.get("cache-control"), "no-store")
           assert.equal(
             (await response.json()).error.code,
             denied === "session" ? "session_forbidden" : denied === "action" ? "skill_permission_denied" : "product_tenant_forbidden",
@@ -550,5 +553,113 @@ test("Admin detail crosses the real Native Connect binary client with exact conf
   } finally {
     owner.closeAllConnections()
     await Promise.all([app?.close(), new Promise((resolve) => owner.close(resolve))])
+  }
+})
+
+test("Admin early session/action failures preserve correlation and their original HTTP failure", async (t) => {
+  for (const [kind, status, code] of [
+    ["session", 401, "session_authentication_required"],
+    ["session", 429, "session_rate_limited"],
+    ["action", 503, "iam_admission_unavailable"],
+    ["session-throw", 503, "skill_dependency_unavailable"],
+  ]) {
+    await t.test(`${kind}-${status}`, async () => {
+      let sessionCalls = 0,
+        actionCalls = 0,
+        ownerCalls = 0
+      const app = await startSkillAdminTestApp(correctionConfig, {
+        sessionAdmission: {
+          verify: async () => {
+            sessionCalls++
+            if (kind === "session-throw") throw new Error("private session failure")
+            if (kind === "session") return { ok: false, status, code, ...(status === 429 ? { retryAfter: "7" } : {}) }
+            return { ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: false }
+          },
+        },
+        skillAuthorization: {
+          check: async () => {
+            actionCalls++
+            return { ok: false, status, code }
+          },
+        },
+        skillAdminClient: {
+          list: async () => {
+            ownerCalls++
+            assert.fail("rejected request reached owner")
+          },
+        },
+      })
+      try {
+        const headers = { ...correctionHeaders, "x-kokoro-request-id": "admin-early-correlation" }
+        delete headers["content-type"]
+        delete headers["idempotency-key"]
+        const response = await fetch(`${app.base}/v1/admin/skills?limit=25`, { headers })
+        assert.equal(response.status, status)
+        assert.equal(response.headers.get("x-request-id"), "admin-early-correlation")
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        assert.match(response.headers.get("content-type"), /^application\/json/u)
+        assert.equal(response.headers.get("retry-after"), status === 429 ? "7" : null)
+        assert.deepEqual(await response.json(), {
+          error: {
+            code,
+            message: kind.endsWith("throw")
+              ? "Skill admin dependency is unavailable"
+              : kind === "session"
+                ? "BFF user admission failed"
+                : "Skill action admission failed",
+            retryable: status === 429 || status === 503,
+          },
+        })
+        assert.equal(sessionCalls, 1)
+        assert.equal(actionCalls, kind.startsWith("action") ? 1 : 0)
+        assert.equal(ownerCalls, 0)
+      } finally {
+        await app.close()
+      }
+    })
+  }
+})
+
+test("Unmatched Admin Skill native routes leave response and dependencies untouched", async () => {
+  const { handleSkillAdminRequest } = await import("../dist/http/routes/skill-admin-native.js")
+  let calls = 0
+  const forbidden = async () => {
+    calls++
+    assert.fail("unmatched route used admission or owner")
+  }
+  const server = createServer(async (request, response) => {
+    const handled = await handleSkillAdminRequest(
+      request,
+      response,
+      correctionConfig,
+      { verify: forbidden },
+      { check: forbidden },
+      { list: forbidden, command: forbidden },
+    )
+    const untouched = { handled, headers: response.getHeaders(), ended: response.writableEnded, headersSent: response.headersSent }
+    response.statusCode = 404
+    response.end(JSON.stringify(untouched))
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    for (const [method, path] of [
+      ["GET", "/v1/other/skills"],
+      ["PUT", "/v1/admin/skills"],
+      ["POST", "/v1/admin/skills/s/unknown"],
+      ["GET", "/v1/admin/skills/s/extra"],
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+        method,
+        headers: { "x-kokoro-request-id": "unmatched-correlation" },
+      })
+      assert.equal(response.status, 404)
+      assert.equal(response.headers.get("x-request-id"), null)
+      assert.deepEqual(await response.json(), { handled: false, headers: {}, ended: false, headersSent: false })
+    }
+    assert.equal(calls, 0)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
   }
 })

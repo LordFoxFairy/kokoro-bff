@@ -12,7 +12,15 @@ const valid = { parts_format_version: 1, revision: "8", final_segment_id: null, 
 function setup(row: unknown) {
   const releases: unknown[] = []
   const client = Object.assign(new EventEmitter(), {
-    query: async (sql: string) => ({ rows: sql.includes("FROM bff_message message") ? (row ? [row] : []) : [] }),
+    query: async (sql: string) => ({
+      rows: sql.includes("FROM bff_message message")
+        ? row
+          ? [row]
+          : []
+        : sql.includes("FROM bff_conversation conversation")
+          ? [{ tenant_id: "tenant", owner_id: "owner", conversation_id: "session", project_ref: null }]
+          : [],
+    }),
     release: (broken?: unknown) => releases.push(broken),
   })
   const pool = { connect: async () => client }

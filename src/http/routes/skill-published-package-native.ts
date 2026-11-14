@@ -27,6 +27,7 @@ export async function handlePublishedSkillPackageRequest(
   const parts = new URL(request.url ?? "/", "http://bff.local").pathname.split("/").filter(Boolean).map(decode)
   if (parts.length !== 4 || parts[0] !== "v1" || parts[1] !== "skills" || parts[3] !== "package") return false
   const id = requestId(request)
+  response.setHeader("x-request-id", id)
   const signal = AbortSignal.timeout(10_000)
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)

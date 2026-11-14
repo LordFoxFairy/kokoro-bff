@@ -1,3 +1,5 @@
+import { readCurrentConversation } from "./chat-conversation-access.js"
+import type { ProjectAccess } from "../../domain/project/access.js"
 import type { Pool, PoolClient } from "pg"
 import type { MessageReadLifetime } from "../../application/chat/types.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
@@ -11,7 +13,7 @@ export function createChatConversationLookup(pool: Pick<Pool, "query" | "connect
     conversationId: string,
     projectRef: string | undefined,
     lifetime?: MessageReadLifetime,
-  ): Promise<Conversation | null> {
+  ): Promise<(Conversation & { projectAccess?: ProjectAccess }) | null> {
     const sql = `SELECT ${conversationColumns}
          FROM bff_conversation
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
@@ -65,4 +67,14 @@ export async function readOwnedConversationSnapshotRow(
     [tenantId, subjectId, conversationId, projectRef ?? null, direct],
   )
   return conversation.rows[0]
+}
+
+/** Explicit content-read lookup. The original private finder remains for Share/Move/control management. */
+export function createReadableChatConversationLookup(pool: Pick<Pool, "query" | "connect">): ChatConversationLookup {
+  return async (tenantId, subjectId, conversationId, projectRef, lifetime) => {
+    const current = await withMessageReadClient(pool, lifetime ?? { signal: new AbortController().signal, deadlineAt: performance.now() + 10000 }, (client) =>
+      readCurrentConversation(client, tenantId, subjectId, conversationId, projectRef, false),
+    )
+    return current ? { ...conversationFromRow(current.conversation), ...(current.projectAccess ? { projectAccess: current.projectAccess } : {}) } : null
+  }
 }

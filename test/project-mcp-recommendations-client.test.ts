@@ -41,6 +41,7 @@ test("new ref verification uses existing exact scoped metadata only, with at mos
           custom_api: {
             profile_id: input.profileId,
             name: "API",
+            governance_status: "active",
             state_version: "1",
             environment: [{ name: "KEY", configured: true, state_version: "1", status: "active" }],
             created_at: "2026-10-27T00:00:00Z",
@@ -125,4 +126,35 @@ test("candidate verification rejects wrong identities, revoked or wrong-type con
     ),
     (e) => e instanceof ConnectError && e.code === Code.NotFound,
   )
+})
+
+test("Custom API recommendation additions require an exact fresh active profile, never an immutable ACK", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const read = (state: unknown, id = "api") => ({
+    custom_api: {
+      profile_id: id,
+      name: "API",
+      governance_status: state,
+      state_version: "7",
+      environment: [],
+      created_at: "2026-11-13T00:00:00Z",
+      updated_at: "2026-11-13T00:00:00Z",
+    },
+  })
+  const run = (response: unknown) =>
+    validate(
+      [{ kind: "custom_api", profile_id: "api" }],
+      { mcpPersonalClient: null, customApiClient: { execute: async () => response } },
+      identity,
+      new AbortController().signal,
+      performance.now() + 2000,
+    )
+  await run(read("active"))
+  for (const state of ["quarantined", "revoked"])
+    await assert.rejects(
+      run(read(state)),
+      (error: unknown) => error instanceof ConnectError && error.code === Code.FailedPrecondition && error.rawMessage === "Recommendation unavailable",
+    )
+  for (const response of [read(undefined), read(""), read("unknown"), read("active", "other"), { ...read("active"), replayed: true }])
+    await assert.rejects(run(response), /project_mcp_recommendations_response_invalid/u)
 })

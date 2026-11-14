@@ -6,6 +6,7 @@ import type {
   ReplaceProjectMcpRecommendationsResult,
 } from "../../application/projects/types.js"
 import type { PostgresBffDatabase } from "./client.js"
+import { lockProjectForEdit, projectReadPredicate } from "./project-access.js"
 
 /** A single bounded Project configuration transaction. It never touches command receipts. */
 async function transaction<T>(
@@ -108,7 +109,7 @@ async function transaction<T>(
   }
 }
 type Row = { project_id: string; recommended_mcp_refs: unknown; mcp_recommendations_state_version: number }
-const scope = "tenant_id=$1 AND owner_id=$2 AND project_id=$3 AND deleted_at IS NULL"
+const scope = `tenant_id=$1 AND project_id=$3 AND deleted_at IS NULL AND ${projectReadPredicate}`
 export function readProjectMcpRecommendations(database: PostgresBffDatabase, input: ProjectMcpRecommendationQuery) {
   return transaction(
     database,
@@ -135,7 +136,9 @@ export function replaceProjectMcpRecommendations(
     database,
     input,
     async (query) => {
-      const selected = await query<Row>(`SELECT project_id,recommended_mcp_refs,mcp_recommendations_state_version FROM bff_project WHERE ${scope} FOR UPDATE`, [
+      const access = await lockProjectForEdit({ query }, input, input.projectId)
+      if (access.kind !== "editable") return { kind: access.kind }
+      const selected = await query<Row>(`SELECT project_id,recommended_mcp_refs,mcp_recommendations_state_version FROM bff_project WHERE ${scope}`, [
         input.tenantId,
         input.subjectId,
         input.projectId,

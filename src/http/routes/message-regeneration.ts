@@ -134,6 +134,7 @@ export async function messageRegenerationRoute(
     if (!response.destroyed && !response.writableEnded) send(response, 202, { data })
   } catch (error) {
     if (error instanceof MessageRegenerationAdmissionError) fail(error.status, error.code, error.retryAfter)
+    else if (error instanceof Error && error.message === "CHAT_TURN_PROJECT_FORBIDDEN") fail(403, "permission_denied")
     else if (error instanceof Error && error.message === "request_body_too_large") fail(413, error.message)
     else if (error instanceof Error && error.message === "message_regeneration_request_invalid") fail(400, error.message)
     else if (

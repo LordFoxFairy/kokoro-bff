@@ -555,6 +555,33 @@ export const zSchema74A01A81A2A27C05 = z
   })
   .strict()
 
+export const zSchema4Eec9Ad0168Aadad = z
+  .object({
+    provider_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      )
+      .optional(),
+    provider_model_name: z.string().min(1).max(255).optional(),
+    display_name: z.string().min(1).max(160).optional(),
+    input_modalities: z
+      .array(z.enum(["text", "image", "audio", "video"]))
+      .min(1)
+      .max(4)
+      .optional(),
+    output_modalities: z
+      .array(z.enum(["text", "image", "audio", "video"]))
+      .min(1)
+      .max(4)
+      .optional(),
+    request_model: z.string().min(1).max(255).optional(),
+    context_window: z.int().gte(1).lte(2147483647).nullish(),
+    max_output_tokens: z.int().gte(1).lte(2147483647).nullish(),
+    priority: z.int().gte(0).lte(100000).optional(),
+  })
+  .strict()
+
 export const zSchemaC20E470A1Fcfd743 = z
   .object({
     data: z
@@ -1021,6 +1048,35 @@ export const zCreateModelRevisionHeaders = z
  * Success
  */
 export const zCreateModelRevisionResponse = zSchemaEdc460D150C8281c
+
+export const zUpdateModelRevisionDraftBody = zSchema4Eec9Ad0168Aadad
+
+export const zUpdateModelRevisionDraftHeaders = z
+  .object({
+    "x-kokoro-service": z.enum(["web-bff", "kokoro-agent", "system-admin", "model-management"]),
+    "x-kokoro-tenant-id": z.string().min(1).max(160).optional(),
+    "x-kokoro-actor-id": z.string().min(1).max(160),
+    "x-kokoro-iam-permissions": z.string().max(160),
+    "x-request-id": z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+      .optional(),
+    "x-kokoro-trace-id": z.string().max(160).optional(),
+    "Idempotency-Key": z.string().min(1).max(128),
+    "If-Match": z.string().regex(/^"[1-9][0-9]*"$/),
+  })
+  .strict()
+
+export const zUpdateModelRevisionDraftPath = z
+  .object({
+    revision_id: z.uuid(),
+  })
+  .strict()
+
+/**
+ * Success
+ */
+export const zUpdateModelRevisionDraftResponse = zSchemaEdc460D150C8281c
 
 export const zPublishModelRevisionHeaders = z
   .object({

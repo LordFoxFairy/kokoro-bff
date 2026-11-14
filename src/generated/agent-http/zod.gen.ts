@@ -176,45 +176,93 @@ export const zLaunchRequest = z.object({
     )
     .optional(),
   personal_context: z
-    .object({
-      schema_version: z.literal(1),
-      owner: z.object({
-        tenant_ref: z.string().min(1),
-        user_ref: z.string().min(1),
-      }),
-      profile: z
+    .union([
+      z.null(),
+      z
         .object({
-          revision: z.int().gte(1).lte(9007199254740991),
-          nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-          instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+          schema_version: z.literal(1),
+          owner: z.object({ tenant_ref: z.string().min(1), user_ref: z.string().min(1) }).strict(),
+          profile: z.union([
+            z.null(),
+            z
+              .object({
+                revision: z.number().int().min(1).max(9007199254740991),
+                nickname: z.string().max(128).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                occupation: z.string().max(256).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                about: z.string().max(2000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                instructions: z.string().max(8000).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+              })
+              .strict(),
+          ]),
+          knowledge: z
+            .object({
+              usage_revision: z.number().int().min(0).max(9007199254740991),
+              enabled: z.boolean(),
+              items: z
+                .array(
+                  z
+                    .object({
+                      knowledge_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])", "u")),
+                      revision: z.number().int().min(1).max(9007199254740991),
+                      name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                      content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+                    })
+                    .strict(),
+                )
+                .max(100),
+            })
+            .strict()
+            .refine((value) => value.enabled !== false || value["items"].length <= 0, "Published personal usage condition")
+            .refine((value) => value.enabled !== true || value["usage_revision"] >= 1, "Published personal usage condition")
+            .refine((value) => new Set(value.items.map((item) => item.knowledge_id)).size === value.items.length, "Personal knowledge identity must be unique"),
         })
-        .nullable(),
-      knowledge: z.intersection(
-        z.unknown(),
-        z.object({
-          usage_revision: z.int().gte(0).lte(9007199254740991),
-          enabled: z.boolean(),
-          items: z
-            .array(
-              z.object({
-                knowledge_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/),
-                revision: z.int().gte(1).lte(9007199254740991),
-                name: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-                when_to_use: z.string().min(1).max(500).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-                content: z.string().min(1).max(2000).regex(new RegExp("^(?=[\\s\\S]*\\S)[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
-              }),
-            )
-            .max(100),
-        }),
-      ),
-    })
-    .nullish(),
+        .strict(),
+    ])
+    .optional(),
   project_instruction: z
     .string()
     .min(1)
     .regex(new RegExp("[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]", "u"))
+    .optional(),
+  shared_conversation_context: z
+    .object({
+      project_ref: z.string().min(1).max(255),
+      conversation_id: z.string().min(1),
+      messages: z
+        .array(
+          z
+            .object({
+              message_id: z.string().min(1),
+              sequence: z
+                .string()
+                .regex(
+                  new RegExp(
+                    "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)(?![\\s\\S])",
+                    "u",
+                  ),
+                ),
+              role: z.enum(["user", "assistant"]),
+              content: z.string().max(262144).regex(new RegExp("^[^\\u0000\\uD800-\\uDFFF]*(?![\\s\\S])", "u")),
+            })
+            .strict(),
+        )
+        .max(128)
+        .refine(
+          (values) =>
+            new Set(values.map((value) => value.message_id)).size === values.length &&
+            values.every((value) =>
+              new RegExp(
+                "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)(?![\\s\\S])",
+                "u",
+              ).test(value.sequence),
+            ) &&
+            values.every((value, index) => index === 0 || BigInt(values[index - 1]!.sequence) < BigInt(value.sequence)) &&
+            values.reduce((total, value) => total + new TextEncoder().encode(value.content).byteLength, 0) <= 262144,
+        ),
+      has_earlier_messages: z.boolean(),
+    })
+    .strict()
     .optional(),
 })
 

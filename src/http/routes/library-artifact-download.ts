@@ -8,7 +8,7 @@ import { FinalArtifactClient } from "../../infrastructure/clients/storage/final-
 import { spoolVerifiedArtifact, type DeadlineClock, type VerifiedArtifactSpool } from "../../infrastructure/clients/storage/artifact-download-transfer.js"
 import { failure } from "../../contracts/index.js"
 import { send } from "../response.js"
-import { readPrivateArtifact, validateArtifactSelector, type FinalArtifactFactory } from "./library-artifact.js"
+import { assertCurrentArtifact, readPrivateArtifact, validateArtifactSelector, type FinalArtifactFactory } from "./library-artifact.js"
 
 type ArtifactRouteTimings = Readonly<{ admissionMs: number; outboundTotalMs: number; outboundIdleMs: number; clock?: DeadlineClock }>
 const DEFAULT_TIMINGS: ArtifactRouteTimings = {
@@ -59,6 +59,7 @@ export async function libraryArtifactDownloadRoute(
     if (config.storage === undefined) throw new ProjectResourceError("artifact_library_unavailable", 503, true)
     spool = await spooler(reference, Number(admitted.item.size_bytes), admitted.item.content_sha256, config.storage.objectOrigin, cancellation.signal)
     if (cancellation.signal.aborted || response.destroyed) return
+    await assertCurrentArtifact(context, repository!, admitted.association, AbortSignal.any([cancellation.signal, AbortSignal.timeout(10_000)]))
     await writeVerifiedDownload(
       response,
       spool,

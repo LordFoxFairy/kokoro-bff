@@ -1,3 +1,4 @@
+import type { ProjectAccess } from "../domain/project/access.js"
 import type { SelectedCustomApiProfile } from "../domain/chat/custom-api-profile-selection.js"
 export type ChatSessionStatus = "active" | "deleted"
 export type ChatRunStatus = "queued" | "running" | "waiting" | "stopped" | "completed" | "cancelled" | "error"
@@ -55,7 +56,7 @@ export type ChatMessageRead = (
       run_id: string
       rendering: OrderedMessageRendering
     })
-) & { terminal_status?: "cancelled"; regenerated_from_message_id?: string }
+) & { terminal_status?: "cancelled"; regenerated_from_message_id?: string; can_regenerate?: boolean }
 
 export type MessageTextPartSlice = {
   kind: "text"
@@ -140,7 +141,7 @@ export type ChatSessionDetail = {
     updated_at: string
   }
   messages?: ChatMessage[]
-  execution_head?: { run_id: string; state: "queued" | "active" | "waiting" | "resuming"; pending_pauses: InteractionState[] }
+  execution_head?: { can_control?: boolean; run_id: string; state: "queued" | "active" | "waiting" | "resuming"; pending_pauses: InteractionState[] }
   files: WorkspaceFile[]
   deliveries: Delivery[]
   deliveries_has_more: boolean
@@ -160,7 +161,8 @@ export type ChatComposerSelection = Readonly<{
 }>
 export type PrivateChatSessionDetail = Omit<ChatSessionDetail, "messages" | "deliveries"> & {
   messages?: ChatMessageRead[]
-  deliveries: Array<Delivery & { display_path?: string }>
+  project_access?: ProjectAccess
+  deliveries: Array<(Delivery & { display_path?: string }) | Omit<Delivery, "asset_id">>
   composer_selection?: ChatComposerSelection
 }
 

@@ -142,3 +142,110 @@ describe("owner upstream transport", () => {
     })
   })
 })
+
+it("PERF-03 caller pre-cancellation opens no upstream socket", async () => {
+  const { proxyUpstream: sourceProxy } = await import("../src/upstream.ts")
+  let received = 0
+  const baseUrl = await listen(
+    createServer((_request, response) => {
+      received++
+      response.end("late")
+    }),
+  )
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(
+    sourceProxy(
+      config(),
+      baseUrl,
+      "/owner",
+      "GET",
+      "pre-cancel",
+      new Headers(),
+      undefined,
+      {},
+      "kokoro-bff",
+      undefined,
+      undefined,
+      undefined,
+      controller.signal,
+    ),
+  )
+  assert.equal(received, 0)
+})
+
+it("PERF-03 caller cancellation closes an in-flight response and removes its listener after settlement", async () => {
+  const { proxyUpstream: sourceProxy } = await import("../src/upstream.ts")
+  const { getEventListeners } = await import("node:events")
+  let started!: () => void, closed!: () => void
+  const entering = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const closing = new Promise<void>((resolve) => {
+    closed = resolve
+  })
+  const baseUrl = await listen(
+    createServer((_request, response) => {
+      response.once("close", closed)
+      response.writeHead(200, { "content-type": "application/json" })
+      response.write('{"data":')
+      started()
+    }),
+  )
+  const controller = new AbortController()
+  const pending = sourceProxy(
+    config({ upstreamTimeoutMs: 500 }),
+    baseUrl,
+    "/owner",
+    "GET",
+    "cancel",
+    new Headers(),
+    undefined,
+    {},
+    "kokoro-bff",
+    undefined,
+    undefined,
+    undefined,
+    controller.signal,
+  )
+  const rejected = assert.rejects(pending, (error: unknown) => {
+    assert.equal((error as { code: string }).code, "upstream_connection_error")
+    return true
+  })
+  await entering
+  controller.abort()
+  await rejected
+  await closing
+  assert.equal(getEventListeners(controller.signal, "abort").length, 0)
+})
+
+it("PERF-03 successful caller-scoped transport removes its listener and keeps the original response", async () => {
+  const { proxyUpstream: sourceProxy } = await import("../src/upstream.ts")
+  const { getEventListeners } = await import("node:events")
+  const controller = new AbortController()
+  const baseUrl = await listen(
+    createServer((_request, response) => {
+      response.writeHead(201)
+      response.end("ok")
+    }),
+  )
+  const result = await sourceProxy(
+    config(),
+    baseUrl,
+    "/owner",
+    "GET",
+    "scoped-success",
+    new Headers(),
+    undefined,
+    {},
+    "kokoro-bff",
+    undefined,
+    undefined,
+    undefined,
+    controller.signal,
+  )
+  assert.equal(result.status, 201)
+  assert.equal(result.body.toString(), "ok")
+  assert.equal(getEventListeners(controller.signal, "abort").length, 0)
+  controller.abort()
+})

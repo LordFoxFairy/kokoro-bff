@@ -4,6 +4,7 @@ import {
   BFF_DATABASE,
   BFF_POOL,
   CHAT_CONVERSATION_LOOKUP,
+  CHAT_READABLE_CONVERSATION_LOOKUP,
   CHAT_IDEMPOTENCY,
   CHAT_SESSION_READS,
   CHAT_SESSION_MUTATIONS,
@@ -15,7 +16,7 @@ import {
   SKILL_AI_ASSOCIATION,
 } from "../../common/tokens.js"
 import type { PostgresBffDatabase } from "../../infrastructure/postgres/client.js"
-import { createChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
+import { createChatConversationLookup, createReadableChatConversationLookup } from "../../infrastructure/postgres/chat-conversation-lookup.js"
 import { PostgresChatSessionStore, createChatSessionMutations } from "../../infrastructure/postgres/chat-session-store.js"
 import { createChatArchive } from "../../infrastructure/postgres/archived-tasks.js"
 import { createSharedTasksReader } from "../../infrastructure/postgres/shared-tasks.js"
@@ -45,6 +46,7 @@ import type { Pool } from "pg"
       inject: [BFF_POOL],
       useFactory: (pool: Pool) => new PostgresIdempotencyRepository(pool),
     },
+    { provide: CHAT_READABLE_CONVERSATION_LOOKUP, inject: [BFF_POOL], useFactory: createReadableChatConversationLookup },
     { provide: CHAT_CONVERSATION_LOOKUP, inject: [BFF_POOL], useFactory: createChatConversationLookup },
     {
       provide: PostgresChatSessionStore,
@@ -78,7 +80,7 @@ import type { Pool } from "pg"
       },
     },
   ],
-  exports: [CHAT_CONVERSATION_LOOKUP, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
+  exports: [CHAT_CONVERSATION_LOOKUP, CHAT_READABLE_CONVERSATION_LOOKUP, PUBLIC_SHARE_SERVICE, SKILL_AI_ASSOCIATION],
 })
 export class ChatModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {

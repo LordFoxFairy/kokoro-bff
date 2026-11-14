@@ -1,0 +1,84 @@
+{
+  "profile": "custom-api-admin-v1",
+  "version": "1.0.0",
+  "owner": "Platform/CustomApi",
+  "visibility": "internal-owner",
+  "normal_activation": false,
+  "service": "kokoro.platform.v1.CustomApiAdminService",
+  "methods": [
+    "ListAdminCustomApis",
+    "GetAdminCustomApi",
+    "QuarantineAdminCustomApi",
+    "RestoreAdminCustomApi",
+    "RevokeAdminCustomApi",
+    "ListAdminCustomApiAuditEvents"
+  ],
+  "states": [
+    "active",
+    "quarantined",
+    "revoked"
+  ],
+  "safe_profile_fields": [
+    "profile_id",
+    "owner_user_id",
+    "name",
+    "governance_status",
+    "state_version",
+    "created_at",
+    "updated_at"
+  ],
+  "command": {
+    "key": "original_command_id",
+    "digest": "method_tenant_actual_actor_profile_original_cas_action_reason",
+    "maximum_expected_version": 2147483646,
+    "replay": "original_safe_ack_not_current_state",
+    "authorization": "fresh_before_receipt",
+    "expired": "reject_never_reexecute"
+  },
+  "audit": {
+    "aggregate": "custom_api_profile",
+    "events": [
+      "custom_api.quarantined",
+      "custom_api.restored",
+      "custom_api.revoked",
+      "custom_api.deleted"
+    ],
+    "retention": "independent_of_receipt_published_and_resource_deletion_no_automatic_gc",
+    "read": "tenant_and_profile_scoped_safe_projection_after_delete"
+  },
+  "runtime": "initial_and_final_snapshot_active_exact_version_no_recall_of_delivered_material",
+  "consumers": "personal_governance_status_requires_paired_BFF_App_before_activation",
+  "parent_hashes": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "7bc9253cd91a03f20e263a79be7183436497cc205d321e704e3c2338cdc8fe9c",
+    "contract/descriptor/platform-v1.binpb": "c023847f5f080311eb93273db44afc063467d9af27343c6645b7e73b3d67c731",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "1f007e57ccf3a0926b1e07f533dd1d35bdedc108885e5ab34bf67cd33d93b5ae",
+    "prisma/schema.prisma": "f46429e4580ae8144f4ff22d0d2f9931c4426db75f34771482c31fbf3dd698bf",
+    "prisma/custom-api.constraints.sql": "e583f1e2d16fb584716934bcdc695f59c5c11e4e0bcb8c041c01123c0ab17fea"
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "c895b7f7b727f88e171b954c1d2bf932b4f7065a827ff0f892a7c6fd977b8f02"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "b1263f032cd6ac4747933b55c077bb62e928c732f014b63a480cc6342e0011da"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "b9425907963cce44724976f95dbe25afd397442ec99c4bf97330567c185e588a"
+    },
+    {
+      "path": "prisma/schema.prisma",
+      "sha256": "f33bc5ff640dfbd043cee11835f9b52301ed4938c3d919a51eca6e6c875ad033"
+    },
+    {
+      "path": "prisma/custom-api.constraints.sql",
+      "sha256": "7477b17d72727074850415ee87615f83d47be1451602d1ed6c96788d962d4cc9"
+    },
+    {
+      "path": "contract/auth/bff-service-auth-v2.json",
+      "sha256": "2ed6159000461fd6869fb7134f09686be4744b920e158bc927dd584dd4762be6"
+    }
+  ]
+}

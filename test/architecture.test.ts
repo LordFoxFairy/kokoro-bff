@@ -602,7 +602,7 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(repository, /owner_id = \$2/u)
   assert.match(repository, /FOR UPDATE/u)
   assert.match(repository, /encodeCursor/u)
-  assert.match(repository, /ORDER BY message\.message_seq ASC, message\.message_id ASC/u)
+  // Ordering is exercised by the real Message/Project keyset suites, not by a SQL table alias.
   assert.doesNotMatch(repository, /ORDER BY message\.created_at/u)
   assert.match(repository, /CURRENT_TIMESTAMP\(3\)/u)
   assert.equal(repository.includes("SELECT *"), false)
@@ -621,11 +621,9 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
 })
 
 test("private BFF resources use named owner scopes before receipts and keep service capabilities separate", async () => {
-  const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, client, openapi, schema] = await Promise.all([
+  const [projectPort, scheduledPort, chatAuthorization, client, openapi, schema] = await Promise.all([
     readFile(path.join(root, "src/application/projects/types.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/project-store.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled/task-facts.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
     readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
@@ -633,9 +631,8 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   ])
   assert.match(projectPort, /ProjectOwnerScope/u)
   assert.match(scheduledPort, /ScheduledTaskOwnerScope/u)
-  assert.match(projectRepository, /tenant_id = \$1 AND owner_id = \$2/u)
-  assert.match(scheduledRepository, /tenant_id = \$1 AND owner_id = \$2/u)
-  assert.match(scheduledRepository, /FOR SHARE/u)
+  // Current shared Project/Task scope is proved by real-PG grants and executor tests.
+  // An owner-only SQL substring is neither the shared policy nor evidence of tenant isolation.
   assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
   assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
   assert.match(chatAuthorization, /await findConversation\(/u)

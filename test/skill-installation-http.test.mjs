@@ -799,17 +799,27 @@ test("update body stalled after a partial chunk expires the original request bud
   }
 })
 
-test("Project installation six routes use the current owned project, distinct command binding and exit rechecks", async () => {
+test("Project installation six routes split shared read/editor access, preserve actual actor and recheck exit", async () => {
   const { ProjectsModule } = await import("../dist/modules/projects/projects.module.js")
-  const { AGENT_CANCELLATION_DISPATCHER, AGENT_DISPATCH_DISPATCHER, AGUI_PROJECTOR, CHAT_TURN_SERVICE, PROJECT_LOOKUP, PROJECT_SKILL_SELECTION_PROVIDER } =
-    await import("../dist/common/tokens.js")
+  const {
+    AGENT_CANCELLATION_DISPATCHER,
+    AGENT_DISPATCH_DISPATCHER,
+    AGUI_PROJECTOR,
+    CHAT_TURN_SERVICE,
+    PROJECT_LOOKUP,
+    PROJECT_READ_LOOKUP,
+    PROJECT_EDIT_LOOKUP,
+    PROJECT_SKILL_SELECTION_PROVIDER,
+  } = await import("../dist/common/tokens.js")
   let selection = [],
     writes = 0,
     commits = 0,
     admitted = true
   const calls = []
   const receipts = new Map()
-  let visible = true
+  let visible = true,
+    editable = true,
+    bodyQualified
   let wrongResponse = null
   const project = { id: "project-canonical" }
   const client = Object.fromEntries(
@@ -849,7 +859,10 @@ test("Project installation six routes use the current owned project, distinct co
     },
     find: async (scope, ref) => {
       assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
-      return visible && ["project-alias", project.id].includes(ref) ? project : null
+      const current = visible && ["project-alias", project.id].includes(ref) ? project : null
+      bodyQualified?.()
+      bodyQualified = undefined
+      return current
     },
   }
   const sessionAdmission = {
@@ -885,7 +898,11 @@ test("Project installation six routes use the current owned project, distinct co
     .overrideProvider(CHAT_TURN_SERVICE)
     .useValue(chatTurnService)
     .overrideProvider(PROJECT_LOOKUP)
+    .useValue({ find: async () => assert.fail("shared installation routes must not borrow private owner lookup") })
+    .overrideProvider(PROJECT_READ_LOOKUP)
     .useValue({ find: projectService.find })
+    .overrideProvider(PROJECT_EDIT_LOOKUP)
+    .useValue({ find: async (...args) => (editable ? projectService.find(...args) : null) })
     .overrideProvider(PROJECT_SKILL_SELECTION_PROVIDER)
     .useValue({ ...projectService, getReceipt: async (scope) => receipts.get(scope) ?? null })
     .compile()
@@ -909,6 +926,52 @@ test("Project installation six routes use the current owned project, distinct co
       assert.equal(r.status, 200, JSON.stringify(await r.clone().json()))
       assert.equal(calls.at(-1).method, expected)
     }
+    editable = false
+    for (const suffix of ["", "/i"]) assert.equal((await fetch(base + suffix, { headers })).status, 200)
+    const beforeViewer = calls.length
+    for (const [method, suffix, body] of [
+      ["POST", "", { source_ref: "skill:a" }],
+      ["PUT", "/i/enabled", { enabled: false }],
+      ["POST", "/i/update", { expected_source_ref: "skill:a", source_ref: "skill:b" }],
+      ["DELETE", "/i", undefined],
+    ]) {
+      const response = await fetch(base + suffix, {
+        method,
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "viewer-denied" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      assert.equal(response.status, 404, "read access never authorizes Project installation mutation")
+    }
+    assert.equal(calls.length, beforeViewer, "viewer sends no owner mutation")
+    assert.ok(calls.every(({ input }) => input.subject === "user-session" && input.tenant === "tenant"))
+    editable = true
+    const qualified = new Promise((resolve) => {
+      bodyQualified = resolve
+    })
+    let stalledRequest
+    const beforeStalled = calls.length
+    const stalled = new Promise((resolve, reject) => {
+      stalledRequest = httpRequest(
+        base + "/i/enabled",
+        {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "revoke-during-body" },
+        },
+        (res) => {
+          res.resume()
+          res.once("end", () => resolve(res.statusCode))
+        },
+      )
+      stalledRequest.once("error", reject)
+      stalledRequest.setTimeout(2000, () => stalledRequest.destroy(Error("stalled Project body exceeded fixture budget")))
+      stalledRequest.write('{"enabled":')
+    })
+    await qualified
+    editable = false
+    stalledRequest.end("false}")
+    assert.equal(await stalled, 404)
+    assert.equal(calls.length, beforeStalled, "losing edit access while reading a partial body prevents the owner write")
+    editable = true
     // A valid response for another resource or operation must never acknowledge this request.
     const invalidResults = [
       ["GET", "/i", undefined, "get", { installationId: { value: "other" } }, undefined],

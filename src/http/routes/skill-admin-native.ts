@@ -62,6 +62,7 @@ export async function handleSkillAdminRequest(
   const action = actionFor(request.method ?? "GET", path)
   if (action === null) return false
   const id = requestId(request)
+  response.setHeader("x-request-id", id)
   const signal = AbortSignal.timeout(10_000)
   try {
     const admitted = await authorizeUserRequest(request, config, admission, id, signal, response)

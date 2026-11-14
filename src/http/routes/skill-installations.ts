@@ -331,6 +331,9 @@ export async function skillInstallationRoute(
       activeSignal.removeEventListener("abort", aborted)
     }
   }
+  const checkProject = async () => {
+    if (projectAccess && (await currentProject()) !== projectRef) throw new ConnectError("Project not found", Code.NotFound)
+  }
   const enrich = async <T>(value: T) => {
     const result = await new IamPublisherProfileClient(iamBaseUrl ?? "", 5000, credentialFile ?? null).enrich(
       context.identity.namespace,
@@ -339,7 +342,7 @@ export async function skillInstallationRoute(
       value,
       signal!,
     )
-    if (projectAccess && (await currentProject()) !== projectRef) throw new ConnectError("Project not found", Code.NotFound)
+    await checkProject()
     return result
   }
   try {
@@ -355,6 +358,7 @@ export async function skillInstallationRoute(
       const input = parseInstallInput(await readBody(request, 65_536)),
         key = idempotencyKey(request)
       const commandId = installationCommandId("install", common.tenant, common.subject, input.sourceRef, key, projectRef)
+      await checkProject()
       const result = await client.install(
         {
           ...common,
@@ -392,6 +396,7 @@ export async function skillInstallationRoute(
       const key = idempotencyKey(request)
       if ((await readBody(request, 1)).length) throw new Error("invalid_skill_installation_request")
       const commandId = installationCommandId("remove", common.tenant, common.subject, id, key, projectRef)
+      await checkProject()
       const result = await client.remove(
         {
           ...common,
@@ -412,6 +417,7 @@ export async function skillInstallationRoute(
         throw new Error("invalid_skill_installation_request")
       const key = idempotencyKey(request),
         input = parseUpdateInput(await readBody(request, 65_536, signal))
+      await checkProject()
       const result = await client.update(
         {
           ...common,
@@ -431,6 +437,7 @@ export async function skillInstallationRoute(
       const key = idempotencyKey(request),
         input = parseEnabledInput(await readBody(request, 65_536))
       const commandId = installationCommandId("set-enabled", common.tenant, common.subject, id, key, projectRef)
+      await checkProject()
       const result = await client.setEnabled(
         {
           ...common,

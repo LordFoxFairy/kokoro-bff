@@ -1,0 +1,2179 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro Platform Business HTTP API",
+    "version": "6.3.0",
+    "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
+  },
+  "servers": [
+    {
+      "url": "http://kokoro-platform:8086"
+    }
+  ],
+  "x-kokoro-runtime": {
+    "default_surfaces": ["skill-catalog"],
+    "surface_requirements": {
+      "skill-source": ["storage", "iam_projection_introspection"],
+      "mcp-server": ["provider_catalog", "iam_projection_introspection"]
+    },
+    "startup_policy": "Missing configuration or a failed readiness probe prevents the process from listening."
+  },
+  "paths": {
+    "/v1/skills": {
+      "get": {
+        "operationId": "listVisibleSkills",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "category_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          {
+            "name": "source_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["personal", "official", "third_party"]
+            }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/skills/{skill_id}": {
+      "get": {
+        "operationId": "getPublishedPersonalSkill",
+        "summary": "Read the current ACTIVE personal Skill by canonical skill_id, without requiring installation.",
+        "description": "Only the authenticated BFF workload may project its current Product Session subject. The IAM tenant and that subject must match the Skill tenant and user owner. Missing, non-owner, cross-tenant, non-personal, or non-ACTIVE Skills are indistinguishable 404 responses. This read never returns package assets, manifests, signed URLs, or execution-only details.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PublishedPersonalSkill"
+          },
+          "400": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          }
+        }
+      }
+    },
+    "/v1/skills/pool": {
+      "get": {
+        "operationId": "listVisibleSkillPool",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "category_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          {
+            "name": "source_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["personal", "official", "third_party"]
+            }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/skills/catalog": {
+      "get": {
+        "operationId": "listVisibleSkillCatalog",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "category_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          {
+            "name": "source_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["personal", "official", "third_party"]
+            }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/mcp/servers": {
+      "get": {
+        "operationId": "listMcpServers",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "mcp-server",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "name": "provider_key",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/McpServerList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/mcp/connections": {
+      "get": {
+        "operationId": "listSelfMcpConnections",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "mcp-connection",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/McpConnectionId"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "name": "provider_key",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191
+            },
+            "required": false
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/McpConnectionList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "List current subject active MCP connections"
+      }
+    },
+    "/v1/self/skills": {
+      "get": {
+        "operationId": "listSelfManagedSkills",
+        "summary": "List the authenticated Product subject own Skills across management states.",
+        "description": "Returns only the current subject own exact Skill revisions. Management visibility does not grant installation or execution.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/SelfSkillStatus"
+          },
+          {
+            "name": "source_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["personal", "official", "third_party"]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
+    },
+    "/v1/self/skills/{skill_id}": {
+      "get": {
+        "operationId": "getSelfManagedSkill",
+        "summary": "Read one exact Skill revision owned by the authenticated Product subject.",
+        "description": "Returns the current subject own exact Skill in any supported management state. Missing and non-owner Skills are indistinguishable.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkill"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
+    },
+    "/v1/self/skills/{skill_id}/versions": {
+      "get": {
+        "operationId": "listSelfSkillVersions",
+        "summary": "Read the authenticated subject complete personal series version history.",
+        "description": "Uses an owned exact revision anchor and rejects mixed-owner series. Published history is ordered by revision descending. Current is the formal publication pointer, not the largest revision; history does not grant execution.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkillHistory"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "RequestId": {
+        "name": "x-kokoro-request-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
+      "TenantId": {
+        "name": "x-kokoro-tenant-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": "Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces)."
+      },
+      "SubjectId": {
+        "name": "x-kokoro-subject",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,254}$"
+        },
+        "description": "Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity."
+      },
+      "SkillQuery": {
+        "name": "query",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "SkillTags": {
+        "name": "tags",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "style": "form",
+        "explode": true
+      },
+      "SkillScope": {
+        "name": "scope_kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "project",
+            "organization",
+            "session",
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "SkillId": {
+        "name": "skill_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+        },
+        "description": "Canonical Platform Skill ID, not a source_ref or package asset ID."
+      },
+      "McpConnectionId": {
+        "name": "connection_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+        }
+      },
+      "SelfSkillStatus": {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "active",
+            "disabled",
+            "withdrawn",
+            "quarantined",
+            "discarded"
+          ]
+        },
+        "description": "Optional exact management-state filter; not an execution eligibility assertion."
+      }
+    },
+    "schemas": {
+      "Skill": {
+        "type": "object",
+        "required": [
+          "series_id",
+          "source_ref",
+          "name",
+          "description",
+          "content_hash",
+          "scope",
+          "revision",
+          "enabled",
+          "skill_updated_at",
+          "example_prompts",
+          "category_keys",
+          "product",
+          "created_at",
+          "updated_at",
+          "owner_scope"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "installed"
+              ],
+              "properties": {
+                "installed": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "acquisition_kind"
+              ]
+            }
+          }
+        ],
+        "properties": {
+          "series_id": {
+            "type": "string"
+          },
+          "source_ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "project",
+              "organization",
+              "session",
+              "unknown"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "acquisition_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "direct",
+              "hub"
+            ],
+            "description": "Persisted installation acquisition, not creation method or current catalog visibility. Omitted when no installation was selected."
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "skill_updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
+          },
+          "category_keys": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          "product": {
+            "$ref": "#/components/schemas/SkillProductFacts"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "owner_scope": {
+            "type": "object",
+            "required": ["kind", "id"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "McpServer": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "provider_key",
+          "server_identity",
+          "transport",
+          "declaration_digest",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "server_id": {
+            "type": "string"
+          },
+          "provider_key": {
+            "type": "string"
+          },
+          "server_identity": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string",
+            "enum": ["stdio", "streamable_http", "sse_compat", "unknown"]
+          },
+          "declaration_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["registered", "disabled", "unknown"]
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "retryable"],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkill": {
+        "type": "object",
+        "required": [
+          "skill_id",
+          "source_ref",
+          "revision",
+          "status",
+          "name",
+          "summary",
+          "tags",
+          "skill_updated_at",
+          "example_prompts",
+          "category_keys",
+          "product"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ref": {
+            "type": "string",
+            "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skill_updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
+          },
+          "category_keys": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          "product": {
+            "$ref": "#/components/schemas/SkillProductFacts"
+          }
+        }
+      },
+      "McpConnection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connection_id",
+          "connector_id",
+          "server_id",
+          "provider_key",
+          "transport",
+          "status"
+        ],
+        "properties": {
+          "connection_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "connector_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "server_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "provider_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "transport": {
+            "type": "string",
+            "enum": ["streamable_http"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active"]
+          }
+        }
+      },
+      "SelfManagedSkill": {
+        "type": "object",
+        "required": [
+          "skill_id",
+          "source_ref",
+          "series_id",
+          "revision",
+          "name",
+          "summary",
+          "tags",
+          "status",
+          "skill_updated_at",
+          "example_prompts",
+          "category_keys",
+          "product"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "source_ref": {
+            "type": "string",
+            "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "series_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": ".*\\S.*"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 65535
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "maxItems": 100
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "disabled",
+              "withdrawn",
+              "quarantined",
+              "discarded"
+            ]
+          },
+          "skill_updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
+          },
+          "category_keys": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "programming",
+                "data",
+                "automation",
+                "business",
+                "design",
+                "media",
+                "content",
+                "apps"
+              ]
+            }
+          },
+          "product": {
+            "$ref": "#/components/schemas/SkillProductFacts"
+          }
+        }
+      },
+      "SkillIamRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["user", "organization"]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      },
+      "SkillRepositoryStats": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stars", "forks", "observed_at", "metadata_source_url"],
+        "properties": {
+          "stars": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "maxLength": 19
+          },
+          "forks": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "maxLength": 19
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata_source_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          }
+        }
+      },
+      "SkillAiProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "conversation_id",
+          "run_ref",
+          "artifact_ref",
+          "source_event_id",
+          "source_event_seq",
+          "source_event_digest",
+          "asset_ref",
+          "content_sha256",
+          "size_bytes",
+          "mime_type"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["ai"]
+          },
+          "conversation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "run_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "source_event_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "source_event_seq": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 19
+          },
+          "source_event_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "asset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 19
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": ["application/zip"]
+          }
+        }
+      },
+      "SkillGithubProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "repository_id",
+          "repository_url",
+          "owner_login",
+          "owner_url",
+          "commit",
+          "path",
+          "content_sha256",
+          "size_bytes",
+          "mime_type"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["github"]
+          },
+          "repository_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "repository_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "owner_login": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "owner_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "repo_stats": {
+            "$ref": "#/components/schemas/SkillRepositoryStats"
+          },
+          "asset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 19
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": ["application/zip"]
+          }
+        }
+      },
+      "SkillCreationProvenance": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["local"]
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/SkillAiProvenance"
+          },
+          {
+            "$ref": "#/components/schemas/SkillGithubProvenance"
+          }
+        ]
+      },
+      "SkillPublisher": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "iam"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["iam"]
+              },
+              "iam": {
+                "$ref": "#/components/schemas/SkillIamRef"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "github_repository"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["github_repository"]
+              },
+              "github_repository": {
+                "$ref": "#/components/schemas/SkillGithubProvenance"
+              }
+            }
+          }
+        ]
+      },
+      "SkillCover": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset_ref", "mime_type", "width", "height"],
+        "properties": {
+          "asset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": ["image/png", "image/jpeg"]
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          }
+        }
+      },
+      "SkillProductFacts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["publication_audience", "state_version"],
+        "properties": {
+          "creator_ref": {
+            "$ref": "#/components/schemas/SkillIamRef"
+          },
+          "publisher": {
+            "$ref": "#/components/schemas/SkillPublisher"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": ["personal", "official", "third_party"]
+          },
+          "creation_provenance": {
+            "$ref": "#/components/schemas/SkillCreationProvenance"
+          },
+          "cover": {
+            "$ref": "#/components/schemas/SkillCover"
+          },
+          "publication_audience": {
+            "type": "string",
+            "enum": ["owner", "tenant", "catalog"]
+          },
+          "state_version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 19
+          },
+          "presentation_kind": {
+            "type": "string",
+            "enum": ["first_party", "github_repository"]
+          }
+        }
+      },
+      "McpAvailability": {
+        "type": "string",
+        "enum": [
+          "available",
+          "refresh_required",
+          "refreshing",
+          "reauthorization_required",
+          "unavailable"
+        ],
+        "description": "Current local configuration and credential qualification only; not network liveness, execution authorization or tool success."
+      },
+      "PersonalMcpConnector": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "availability",
+          "connector_id",
+          "connector_type",
+          "provider_key",
+          "status",
+          "approved_scopes",
+          "enabled",
+          "state_version"
+        ],
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/McpAvailability"
+          },
+          "connector_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "connector_type": {
+            "type": "integer",
+            "enum": [1, 2, 3]
+          },
+          "provider_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [1, 2, 3, 4]
+          },
+          "approved_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "state_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PersonalMcpProvider": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider_key",
+          "display_name",
+          "directory_type",
+          "category_keys",
+          "example_prompts",
+          "enabled",
+          "state_version"
+        ],
+        "properties": {
+          "provider_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "directory_type": {
+            "type": "string",
+            "enum": ["app", "data_source"]
+          },
+          "category_keys": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "efficiency",
+                "creation",
+                "business",
+                "development",
+                "finance",
+                "travel",
+                "health"
+              ]
+            }
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "privacy_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "state_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        }
+      },
+      "PersonalSkillHistoryVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "skill_id",
+          "revision",
+          "name",
+          "summary",
+          "status",
+          "archive_size",
+          "file_count",
+          "created_at",
+          "is_current"
+        ],
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 65535
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "disabled", "withdrawn", "quarantined"]
+          },
+          "archive_size": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PersonalSkillHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["series_id", "publication", "versions"],
+        "properties": {
+          "series_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "current_version_id",
+                  "state_version",
+                  "withdrawn_at"
+                ],
+                "properties": {
+                  "current_version_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 191
+                  },
+                  "state_version": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "withdrawn_at": {
+                    "type": ["string", "null"],
+                    "format": "date-time"
+                  }
+                }
+              }
+            ]
+          },
+          "versions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PersonalSkillHistoryVersion"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      }
+    },
+    "responses": {
+      "SkillList": {
+        "description": "Visible Skill page",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["skills"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Skill"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "McpServerList": {
+        "description": "MCP server page",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["servers"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpServer"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Stable error envelope",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkill": {
+        "description": "Current ACTIVE personal Skill safe summary",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PublishedPersonalSkill"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkillError": {
+        "description": "Published personal Skill error without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "McpConnectionList": {
+        "description": "Current subject active MCP connections",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["data"],
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["connections"],
+                  "properties": {
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpConnection"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SelfSkillList": {
+        "description": "Current subject own Skill management page without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["skills"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfManagedSkill"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SelfSkill": {
+        "description": "Current subject own exact Skill management summary without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/SelfManagedSkill"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SelfSkillError": {
+        "description": "Self Skill management error without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "SelfSkillHistory": {
+        "description": "A private series history page; current identity is independent from availability.",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["data"],
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PersonalSkillHistory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "PlatformWorkload": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque-service-credential",
+        "description": "Platform-local fixed-tenant service credential: kokoro-bff / projection."
+      }
+    }
+  },
+  "security": [
+    {
+      "PlatformWorkload": []
+    }
+  ]
+}

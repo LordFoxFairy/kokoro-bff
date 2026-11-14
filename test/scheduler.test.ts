@@ -11,6 +11,11 @@ import {
   BFF_CONFIG,
   BFF_DATABASE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
+  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
+  SCHEDULED_TASK_SERVICE,
+  SCHEDULED_TASK_IDEMPOTENCY,
+  SESSION_ADMISSION,
   SCHEDULED_AGENT_DISPATCH_REPOSITORY,
   SCHEDULED_AGENT_DISPATCHER,
   SCHEDULED_TASK_DISPATCHER,
@@ -115,7 +120,13 @@ function config(agentBase: string | null, upstreamTimeoutMs = 70_000) {
   }
 }
 
-async function startSchedulerReceiver(runtimeConfig: ReturnType<typeof config>, scheduledTasks: object, receipts: object, scheduledAgentDispatch?: object) {
+async function startSchedulerReceiver(
+  runtimeConfig: ReturnType<typeof config>,
+  scheduledTasks: object,
+  receipts: object,
+  scheduledAgentDispatch?: object,
+  overrides: ReadonlyArray<readonly [symbol, unknown]> = [],
+) {
   const unexpectedDatabaseIo = (): never => assert.fail("Scheduler callback fixture must not access database resources")
   const builder = Test.createTestingModule({ imports: [ScheduledTasksModule] })
     .overrideProvider(BFF_CONFIG)
@@ -145,6 +156,7 @@ async function startSchedulerReceiver(runtimeConfig: ReturnType<typeof config>, 
   ]) {
     builder.overrideProvider(token).useValue(null)
   }
+  for (const [token, value] of overrides) builder.overrideProvider(token).useValue(value)
   const module = await builder.compile()
   const app = module.createNestApplication({ ...BFF_NEST_APPLICATION_OPTIONS, logger: false })
   try {
@@ -402,6 +414,102 @@ describe("Agent launch identities", () => {
 })
 
 describe("ScheduledTask HTTP method ownership", () => {
+  it("admits shared ScheduledTask creates through the readable Project boundary and keeps actual actor, edit denial and original ACK", async () => {
+    const project = { id: "project-shared" }
+    const calls: Array<{ subjectId: string; actorId: string; projectId: string | undefined }> = []
+    const receipts = new Map<string, { fingerprint: string; status: number; body: unknown }>()
+    const bff = await startSchedulerReceiver({ ...config(null), iamWebOrigin: "https://web.example.test" }, {}, {}, undefined, [
+      [
+        SESSION_ADMISSION,
+        new SessionAdmissionDouble(
+          Object.fromEntries(
+            ["creator", "editor", "viewer", "revoked", "foreign"].map((subject) => [subject, { namespace: "tenant_fixture", userId: subject }]),
+          ),
+        ),
+      ],
+      [PROJECT_LOOKUP, { find: async (scope: { subjectId: string }) => (scope.subjectId === "creator" ? project : null) }],
+      [
+        PROJECT_READ_LOOKUP,
+        {
+          find: async (scope: { subjectId: string }, id: string) =>
+            id === project.id && ["creator", "editor", "viewer"].includes(scope.subjectId) ? project : null,
+        },
+      ],
+      [
+        SCHEDULED_TASK_IDEMPOTENCY,
+        {
+          claimReceipt: async (scope: string, fingerprint: string) => {
+            const prior = receipts.get(scope)
+            if (prior) return { claimed: false, receipt: prior }
+            receipts.set(scope, { fingerprint, status: 102, body: {} })
+            return { claimed: true, receipt: null }
+          },
+          putReceipt: async (scope: string, receipt: { fingerprint: string; status: number; body: unknown }) => {
+            receipts.set(scope, receipt)
+          },
+        },
+      ],
+      [
+        SCHEDULED_TASK_SERVICE,
+        {
+          create: async (scope: { subjectId: string }, input: { projectId?: string }, id: string, lineage: { actorId: string }) => {
+            // The real repository owns the locked edit gate; readable viewer must reach its 403, not preflight 404.
+            if (scope.subjectId === "viewer") throw new Error("SCHEDULED_TASK_EDIT_FORBIDDEN")
+            calls.push({ subjectId: scope.subjectId, actorId: lineage.actorId, projectId: input.projectId })
+            return { ...input, id, enabled: true, status: "active", revision: 1 }
+          },
+        },
+      ],
+    ])
+    const body = { title: "Shared QA", prompt: "No dispatch", frequency: "daily", time: "08:00", timezone: "UTC" }
+    const create = (subject: string, path: string, key: string, input: object) =>
+      fetch(bff.base + path, {
+        method: "POST",
+        headers: {
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "web-secret",
+          cookie: `kokoro-issuer.session_token=${subject}`,
+          origin: "https://web.example.test",
+          "content-type": "application/json",
+          "idempotency-key": key,
+        },
+        body: JSON.stringify(input),
+      })
+    try {
+      for (const [path, input] of [
+        [`/v1/projects/${project.id}/scheduled-tasks`, body],
+        ["/v1/scheduled-tasks", { ...body, project_id: project.id }],
+      ] as const) {
+        const key = `create-${path}`
+        for (const subject of ["creator", "editor"]) {
+          const response = await create(subject, path, key, input)
+          assert.equal(response.status, 200, `${subject} ${path}`)
+          const ack = await response.json()
+          const count = calls.length
+          const replay = await create(subject, path, key, input)
+          assert.equal(replay.status, 200)
+          assert.deepEqual(await replay.json(), ack)
+          assert.equal(calls.length, count)
+          assert.deepEqual(calls.at(-1), { subjectId: subject, actorId: subject, projectId: project.id })
+        }
+        for (const [subject, status, code] of [
+          ["viewer", 403, "scheduled_task_edit_forbidden"],
+          ["revoked", 404, "project_not_found"],
+          ["foreign", 404, "project_not_found"],
+        ] as const) {
+          const count = calls.length
+          const response = await create(subject, path, key, input)
+          assert.equal(response.status, status)
+          assert.equal((await response.json()).error.code, code)
+          assert.equal(calls.length, count)
+        }
+      }
+      assert.equal(calls.length, 4)
+    } finally {
+      await bff.close()
+    }
+  })
+
   it("completes a 404 receipt only for the exact Project-not-found owner error and releases unknown failures", async () => {
     const context = { requestId: "mutation-error", identity: { namespace: "tenant_fixture", userId: "owner" } }
     const idempotency = new Map()
@@ -436,7 +544,10 @@ describe("ScheduledTask HTTP method ownership", () => {
       ] as const) {
         ownerError = error
         idempotency.clear()
-        const response = await fetch(base + "/v1/scheduled-tasks/task-1", { method: "PATCH", headers: { "idempotency-key": "original-key" } })
+        const response = await fetch(base + "/v1/scheduled-tasks/task-1", {
+          method: "PATCH",
+          headers: { "idempotency-key": "original-key", "if-match": '"1"' },
+        })
         assert.equal(response.status, status)
         assert.equal(response.headers.get("x-request-id"), context.requestId)
         assert.equal(response.headers.get("cache-control"), "no-store")

@@ -1,3 +1,4 @@
+import { ProjectResourceError } from "../../application/project-resource.error.js"
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import {
@@ -5,7 +6,8 @@ import {
   BFF_POOL,
   PROJECT_PINS,
   PROJECT_TASKS,
-  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
+  PROJECT_EDIT_LOOKUP,
   PROJECT_READS,
   PROJECT_MUTATIONS,
   PROJECT_RENAME,
@@ -48,31 +50,52 @@ import {
 
 @Injectable()
 export class ProjectPinMiddleware implements NestMiddleware {
+  private readonly resourceEdits: ProjectLookup
   private readonly projectResourceReceipts: PostgresIdempotencyRepository
   private readonly projectResourceIdempotency = new Map<string, import("../../application/idempotency.js").IdempotencyEntry>()
 
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(PROJECT_LOOKUP) private readonly lookup: ProjectLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly readLookup: ProjectLookup,
+    @Inject(PROJECT_EDIT_LOOKUP) private readonly editLookup: ProjectLookup,
     @Inject(PROJECT_READS) private readonly reads: ProjectReadStore,
     @Inject(PROJECT_MUTATIONS) private readonly mutations: ProjectMutationStore,
     @Inject(PROJECT_RENAME) private readonly rename: ProjectRenamer,
     @Inject(PROJECT_DELETION) private readonly deletion: ProjectDeletion,
     @Inject(PROJECT_PINS) private readonly pins: ProjectPinProvider,
     @Inject(PROJECT_TASKS) private readonly tasks: ProjectTasks,
-    @Inject(PROJECT_SKILL_SELECTION_PROVIDER) private readonly projectSkillSelection: ProjectSkillSelectionProvider,
-    @Inject(SKILL_INSTALLATION_CLIENT) private readonly installationClient: SkillInstallationConnectClient | null,
-    @Inject(SKILL_AUTHORIZATION) private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
+    @Inject(PROJECT_SKILL_SELECTION_PROVIDER)
+    private readonly projectSkillSelection: ProjectSkillSelectionProvider,
+    @Inject(SKILL_INSTALLATION_CLIENT)
+    private readonly installationClient: SkillInstallationConnectClient | null,
+    @Inject(SKILL_AUTHORIZATION)
+    private readonly skillAuthorization: Pick<SkillAuthorizationClient, "check">,
     @Inject(BFF_POOL) pool: Pool,
   ) {
     this.projectResourceReceipts = new PostgresIdempotencyRepository(pool)
+    this.resourceEdits = {
+      find: async (scope, id, lifetime) => {
+        const editable = await this.editLookup.find(scope, id, lifetime)
+        if (editable) return editable
+        if (await this.readLookup.find(scope, id, lifetime)) throw new ProjectResourceError("project_edit_forbidden", 403)
+        return null
+      },
+    }
   }
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
     void (
       isProjectSkillInstallationRequest(request)
-        ? handleProjectSkillInstallationRequest(request, response, this.config, this.admission, this.skillAuthorization, this.lookup, this.installationClient)
+        ? handleProjectSkillInstallationRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.skillAuthorization,
+            request.method === "GET" ? this.readLookup : this.editLookup,
+            this.installationClient,
+          )
         : isProjectSkillSelectionRequest(request)
           ? handleProjectSkillSelectionRequest(request, response, this.config, this.admission, this.projectSkillSelection, this.installationClient)
           : Promise.resolve(false)
@@ -80,21 +103,21 @@ export class ProjectPinMiddleware implements NestMiddleware {
       .then((handled) => handled || handleProjectRenameRequest(request, response, this.config, this.admission, this.rename))
       .then((handled) => handled || handleProjectDeleteRequest(request, response, this.config, this.admission, this.deletion))
       .then((handled) => handled || handleProjectDeletionStatusRequest(request, response, this.config, this.admission, this.deletion))
-      .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.lookup))
+      .then((handled) => handled || handleProjectResourceDeleteRequest(request, response, this.config, this.admission, this.resourceEdits))
       .then(
         (handled) =>
           handled ||
           handleProjectResourceUploadRequest(request, response, this.config, this.admission, {
-            find: this.lookup.find,
+            find: this.resourceEdits.find,
             receipts: this.projectResourceReceipts,
             idempotency: this.projectResourceIdempotency,
           }),
       )
-      .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.lookup))
-      .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.lookup))
+      .then((handled) => handled || handleProjectResourceReadRequest(request, response, this.config, this.admission, this.readLookup))
+      .then((handled) => handled || handleProjectResourceListRequest(request, response, this.config, this.admission, this.readLookup))
       .then((handled) => handled || handleProjectTaskRequest(request, response, this.config, this.admission, this.tasks))
       .then((handled) => handled || handleProjectWebsitesRequest(request, response, this.config, this.admission, this.reads, this.mutations))
-      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.lookup))
+      .then((handled) => handled || handleProjectCoreReadRequest(request, response, this.config, this.admission, this.reads, this.readLookup))
       .then((handled) => handled || handleProjectPinRequest(request, response, this.config, this.admission, this.pins))
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
@@ -103,7 +126,15 @@ export class ProjectPinMiddleware implements NestMiddleware {
         if (!response.headersSent && !response.writableEnded && !response.destroyed) {
           response.statusCode = 500
           response.setHeader("content-type", "application/json")
-          response.end(JSON.stringify({ error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } }))
+          response.end(
+            JSON.stringify({
+              error: {
+                code: "internal_error",
+                message: "The BFF encountered an internal error",
+                retryable: false,
+              },
+            }),
+          )
         } else if (!response.writableEnded && !response.destroyed) response.destroy()
       })
   }

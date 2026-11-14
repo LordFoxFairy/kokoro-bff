@@ -11,6 +11,8 @@ export type ScheduledTaskStatus = "active" | "paused" | "failed"
  */
 export type ScheduledTaskFact = ScheduledCalendar & {
   id: string
+  ownerId: string
+  executionActorId: string | null
   projectId?: string
   title: string
   prompt: string
@@ -20,6 +22,9 @@ export type ScheduledTaskFact = ScheduledCalendar & {
   status: ScheduledTaskStatus
   revision: number
 }
+
+/** Immutable command snapshot has no current executor/creator projection. */
+export type ScheduledTaskMutationSnapshot = Omit<ScheduledTaskFact, "ownerId" | "executionActorId">
 
 export function utcDate(value: Date, errorCode: string): Date {
   if (Number.isNaN(value.getTime())) throw new Error(errorCode)

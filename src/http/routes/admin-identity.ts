@@ -4,6 +4,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import { failure } from "../../contracts/index.js"
 import type { AdmittedUserRequestContext } from "../../domain/request-context.js"
 import { readIamTeamPage, type TeamReadKind } from "../../infrastructure/clients/iam-team.js"
+import { readIamAuditEvents } from "../../infrastructure/clients/iam-audit-events.js"
 import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
@@ -26,6 +27,8 @@ export async function liveAdminIdentityRead(
   config: BffConfig,
   context: AdmittedUserRequestContext,
   businessPath: readonly string[],
+  signal: AbortSignal,
+  deadlineAt: number,
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   const kind = businessPath[2]
@@ -34,7 +37,7 @@ export async function liveAdminIdentityRead(
     businessPath.length !== 3 ||
     businessPath[0] !== "admin" ||
     businessPath[1] !== "identity" ||
-    !IDENTITY_KINDS.has(kind as TeamReadKind)
+    (kind !== "audit-events" && !IDENTITY_KINDS.has(kind as TeamReadKind))
   ) {
     send(response, 404, failure("admin_identity_route_not_found", "Administrator identity route was not found", context.requestId))
     return
@@ -43,39 +46,55 @@ export async function liveAdminIdentityRead(
     send(response, 403, failure("admin_identity_forbidden", "Current administrator qualification is required", context.requestId))
     return
   }
+  if (
+    kind === "audit-events" &&
+    (new URL(request.url ?? "/", "http://bff.local").pathname !== "/v1/admin/identity/audit-events" ||
+      ["content-length", "transfer-encoding", "content-type", "idempotency-key"].some((name) => request.headers[name] !== undefined))
+  ) {
+    send(response, 400, failure("admin_identity_query_invalid", "Administrator identity page query is invalid", context.requestId))
+    return
+  }
   const page = pageQuery(request)
   if (page === null) {
     send(response, 400, failure("admin_identity_query_invalid", "Administrator identity page query is invalid", context.requestId))
     return
   }
-  const abort = new AbortController()
-  const onAbort = (): void => abort.abort()
-  const onClose = (): void => {
-    if (!response.writableEnded) abort.abort()
-  }
-  request.once("aborted", onAbort)
-  response.once("close", onClose)
-  try {
-    const result = await readIamTeamPage({
+  signal.throwIfAborted()
+  if (kind === "audit-events") {
+    const result = await readIamAuditEvents({
       baseUrl: config.iamBaseUrl,
-      tenantId: context.identity.namespace,
       credentialFile: config.iamUserContextServiceCredentialFile,
+      tenantId: context.identity.namespace,
       subjectId: context.identity.userId,
-      kind: kind as TeamReadKind,
-      ...page,
       requestId: context.requestId,
-      signal: abort.signal,
-      timeoutMs: config.upstreamTimeoutMs,
+      ...page,
+      signal,
+      timeoutMs: Math.min(config.upstreamTimeoutMs, deadlineAt - performance.now()),
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })
-    if (response.destroyed) return
-    if (!result.ok) {
-      send(response, result.status, failure(result.code, "Administrator identity read is unavailable", context.requestId), result.retryAfter)
-      return
-    }
-    send(response, 200, { data: result.data, meta: { request_id: context.requestId, next_cursor: result.nextCursor } })
-  } finally {
-    request.removeListener("aborted", onAbort)
-    response.removeListener("close", onClose)
+    signal.throwIfAborted()
+    if (response.destroyed || response.writableEnded) return
+    if (!result.ok) send(response, result.status, failure(result.code, "Administrator identity read is unavailable", context.requestId), result.retryAfter)
+    else send(response, 200, { data: result.data, meta: { request_id: context.requestId } })
+    return
   }
+  const result = await readIamTeamPage({
+    baseUrl: config.iamBaseUrl,
+    tenantId: context.identity.namespace,
+    credentialFile: config.iamUserContextServiceCredentialFile,
+    subjectId: context.identity.userId,
+    kind: kind as TeamReadKind,
+    ...page,
+    requestId: context.requestId,
+    signal,
+    timeoutMs: Math.min(config.upstreamTimeoutMs, deadlineAt - performance.now()),
+    maxResponseBytes: config.upstreamMaxResponseBytes,
+  })
+  signal.throwIfAborted()
+  if (response.destroyed || response.writableEnded) return
+  if (!result.ok) {
+    send(response, result.status, failure(result.code, "Administrator identity read is unavailable", context.requestId), result.retryAfter)
+    return
+  }
+  send(response, 200, { data: result.data, meta: { request_id: context.requestId, next_cursor: result.nextCursor } })
 }

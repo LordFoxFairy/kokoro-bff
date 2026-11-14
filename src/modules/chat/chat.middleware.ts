@@ -9,6 +9,7 @@ import {
   BFF_CONFIG,
   CHAT_IDEMPOTENCY,
   CHAT_CONVERSATION_LOOKUP,
+  CHAT_READABLE_CONVERSATION_LOOKUP,
   CHAT_SESSION_READS,
   CHAT_SESSION_MUTATIONS,
   CHAT_ARCHIVE,
@@ -17,6 +18,7 @@ import {
   CHAT_MOVE,
   CHAT_TURN_SERVICE,
   PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
   PUBLIC_SHARE_SERVICE,
   SESSION_ADMISSION,
   SKILL_INSTALLATION_CLIENT,
@@ -58,6 +60,8 @@ export class ChatMiddleware implements NestMiddleware {
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
     @Inject(CHAT_CONVERSATION_LOOKUP) private readonly findConversation: ChatConversationLookup,
+    @Inject(CHAT_READABLE_CONVERSATION_LOOKUP) private readonly findReadableConversation: ChatConversationLookup,
+    @Inject(PROJECT_READ_LOOKUP) private readonly readableProjects: ProjectLookup,
     @Inject(CHAT_SESSION_READS) private readonly reads: ChatSessionReads,
     @Inject(CHAT_SESSION_MUTATIONS) private readonly mutations: ChatSessionMutations,
     @Inject(CHAT_ARCHIVE) private readonly archive: ChatArchive,
@@ -82,7 +86,18 @@ export class ChatMiddleware implements NestMiddleware {
       .then(
         (handled) =>
           handled ||
-          handleChatBusinessReadRequest(request, response, this.config, this.admission, this.reads, this.findConversation, this.projects, this.readProcess),
+          handleChatBusinessReadRequest(
+            request,
+            response,
+            this.config,
+            this.admission,
+            this.reads,
+            this.findConversation,
+            this.projects,
+            this.readProcess,
+            this.findReadableConversation,
+            this.readableProjects,
+          ),
       )
       .then((handled) => handled || handleMessageFeedbackRequest(request, response, this.config, this.admission, this.feedback))
       .then((handled) => handled || handleMessageRegenerationRequest(request, response, this.config, this.admission, this.chatTurns))
@@ -110,15 +125,18 @@ export class ChatMiddleware implements NestMiddleware {
             response,
             this.config,
             this.admission,
-            this.findConversation,
-            this.projects,
+            this.findReadableConversation,
+            this.readableProjects,
             this.agUiProjection,
             this.agUiConsumers,
             this.agUiRuntime,
             this.sourceProjectionActive,
           ),
       )
-      .then((handled) => handled || handleChatMessageRequest(request, response, this.config, this.admission, this.chatTurns, this.projects, this.installations))
+      .then(
+        (handled) =>
+          handled || handleChatMessageRequest(request, response, this.config, this.admission, this.chatTurns, this.readableProjects, this.installations),
+      )
       .then((handled) => {
         if (!handled && !response.writableEnded && !response.destroyed) next()
       })

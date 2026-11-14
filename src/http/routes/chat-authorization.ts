@@ -59,6 +59,12 @@ export async function authorizeChatRequest(
   if (!queryScope.ok) return queryScope
 
   const projectRef = queryScope.projectRef
+  // The metadata read checks owned Conversation/Project and Share together on its bounded read-only PG lease.
+  if (request.method === "GET" && businessPath.length === 3 && businessPath[2] === "share") {
+    if (queryScope.scope === "direct" && projectRef !== undefined)
+      return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }
+    return projectRef === undefined ? { ok: true } : { ok: true, projectRef }
+  }
   const isConversationCollection = request.method === "GET" && businessPath.length === 1
   if (isConversationCollection && queryScope.scope === "direct" && projectRef !== undefined) {
     return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }
@@ -66,7 +72,7 @@ export async function authorizeChatRequest(
   const ownerScope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   if (projectRef !== undefined) {
     signal?.throwIfAborted()
-    const project = await projects.find(ownerScope, projectRef)
+    const project = await projects.find(ownerScope, projectRef, signal === undefined ? undefined : { signal, deadlineAt: performance.now() + 10000 })
     signal?.throwIfAborted()
     if (project === null) return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
@@ -81,7 +87,13 @@ export async function authorizeChatRequest(
     let currentConversation = null
     if (conversationId !== undefined && conversationId !== "") {
       signal?.throwIfAborted()
-      currentConversation = await findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+      currentConversation = await findConversation(
+        ownerScope.tenantId,
+        ownerScope.subjectId,
+        conversationId,
+        projectRef,
+        signal === undefined ? undefined : { signal, deadlineAt: performance.now() + 10000 },
+      )
       signal?.throwIfAborted()
     }
     if (conversationId === undefined || conversationId === "" || currentConversation === null) {

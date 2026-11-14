@@ -1,6 +1,7 @@
+import { scheduledRevisionPrecondition } from "../../domain/scheduled-task/execution-binding.js"
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common"
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { BFF_CONFIG, PROJECT_LOOKUP, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
+import { BFF_CONFIG, PROJECT_READ_LOOKUP, SCHEDULED_TASK_IDEMPOTENCY, SCHEDULED_TASK_SERVICE, SESSION_ADMISSION } from "../../common/tokens.js"
 import type { BffConfig } from "../../config/runtime.js"
 import type { SessionAdmission } from "../../auth/session-admission.types.js"
 import type { ProjectLookup } from "../../application/projects/types.js"
@@ -28,9 +29,11 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
   public constructor(
     @Inject(BFF_CONFIG) private readonly config: BffConfig,
     @Inject(SESSION_ADMISSION) private readonly admission: SessionAdmission,
-    @Inject(SCHEDULED_TASK_SERVICE) private readonly tasks: ScheduledTaskService,
-    @Inject(PROJECT_LOOKUP) private readonly projects: ProjectLookup,
-    @Inject(SCHEDULED_TASK_IDEMPOTENCY) private readonly persistent: IdempotencyRepository,
+    @Inject(SCHEDULED_TASK_SERVICE)
+    private readonly tasks: ScheduledTaskService,
+    @Inject(PROJECT_READ_LOOKUP) private readonly projects: ProjectLookup,
+    @Inject(SCHEDULED_TASK_IDEMPOTENCY)
+    private readonly persistent: IdempotencyRepository,
   ) {}
 
   public use(request: IncomingMessage, response: ServerResponse, next: () => void): void {
@@ -60,6 +63,21 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
       if (!admitted.ok) {
         send(response, admitted.status, failure(admitted.code, "BFF user admission failed", id), admitted.retryAfter)
         return
+      }
+      if (route.kind === "patch" || route.kind === "retry") {
+        const tag = request.headers["if-match"]
+        if (scheduledRevisionPrecondition(tag) === null || request.headers["if-none-match"] !== undefined) {
+          send(
+            response,
+            tag === undefined ? 428 : 400,
+            failure(
+              tag === undefined ? "scheduled_task_precondition_required" : "invalid_scheduled_task_precondition",
+              "Exact current definition revision is required",
+              id,
+            ),
+          )
+          return
+        }
       }
       const key = idempotencyKey(request)
       if ((route.kind === "create" || route.kind === "project_create") && key === null) {
@@ -108,7 +126,10 @@ export class ScheduledTaskMutationMiddleware implements NestMiddleware {
       const mutationPath = `/${path.join("/")}`
       const fingerprint = mutationFingerprint(request, path, json, body)
       if (route.kind === "delete") {
-        const scope = { tenantId: admitted.context.identity.namespace, subjectId: admitted.context.identity.userId }
+        const scope = {
+          tenantId: admitted.context.identity.namespace,
+          subjectId: admitted.context.identity.userId,
+        }
         if (abort.signal.aborted) return
         // This preflight does not replace the owner transaction's scoped lock and check.
         const current = await this.tasks.find(scope, route.taskId)

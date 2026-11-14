@@ -15,6 +15,7 @@ export async function uploadProjectResource(
   receipts: IdempotencyRepository,
   storage: ProjectResourceStorage,
   signal: AbortSignal,
+  authorize: () => Promise<void>,
 ): Promise<ProjectResource> {
   const scope = JSON.stringify([context.tenantId, context.subjectId, "project-resource-upload:v1", context.projectId, context.key])
   const fingerprint = projectResourceFingerprint(input)
@@ -22,7 +23,14 @@ export async function uploadProjectResource(
   const command = (operation: string): string => `bff.resource.${operation}.${identity}`
   let uploadId: string | null = null
   let completeAttempted = false
+  const readAsset = async (upload: string, asset: string): Promise<ProjectResource> => {
+    await authorize()
+    const result = await storage.getAsset(upload, asset, input, signal)
+    await authorize()
+    return result
+  }
   try {
+    await authorize()
     const existing = await receipts.getReceipt(scope)
     if (existing !== null && existing.fingerprint !== fingerprint) throw new ProjectResourceError("idempotency_conflict", 409)
     if (existing?.status === 200) {
@@ -35,6 +43,7 @@ export async function uploadProjectResource(
       if (!claim.claimed)
         throw new ProjectResourceError(claim.receipt?.fingerprint !== fingerprint ? "idempotency_conflict" : "idempotency_in_progress", 409, true)
       try {
+        await authorize()
         const created = await storage.createUpload(command("create"), fingerprint, input, signal)
         uploadId = created.uploadId
         await receipts.putReceipt(scope, { fingerprint, status: 200, body: { stage: "admitted", upload_id: uploadId } })
@@ -47,13 +56,14 @@ export async function uploadProjectResource(
       }
     }
     signal.throwIfAborted()
+    await authorize()
     const status = await storage.getUploadStatus(uploadId, signal)
     if (status.sha256 !== input.sha256 || status.sizeBytes !== String(input.bytes.length) || status.mimeType !== input.mimeType)
       throw new ProjectResourceError("storage_response_invalid", 502)
     if (status.state === "completed") {
       completeAttempted = true
       if (status.assetId === null) throw new ProjectResourceError("storage_response_invalid", 502)
-      return await storage.getAsset(uploadId, status.assetId, input, signal)
+      return await readAsset(uploadId, status.assetId)
     }
     if (status.state === "aborted") throw new ProjectResourceError("resource_upload_aborted", 409)
     completeAttempted = false
@@ -82,8 +92,10 @@ export async function uploadProjectResource(
     } else {
       if (body.stage !== "admitted" || body.upload_id !== uploadId || status.sourceVersionId !== null)
         throw new ProjectResourceError("resource_checkpoint_invalid", 503, true)
+      await authorize()
       const created = await storage.createUpload(command("create"), fingerprint, input, signal)
       if (created.uploadId !== uploadId) throw new ProjectResourceError("storage_response_invalid", 502)
+      await authorize()
       sourceVersionId = await storage.put(created.reference, input, signal)
       completeCommandId = command("complete")
       completeDigest = createHash("sha256")
@@ -105,8 +117,9 @@ export async function uploadProjectResource(
       if (!cas.updated && JSON.stringify(cas.receipt) !== JSON.stringify(selected)) throw new ProjectResourceError("resource_checkpoint_unavailable", 503, true)
     }
     completeAttempted = true
+    await authorize()
     const completed = await storage.completeUpload(completeCommandId, completeDigest, uploadId, sourceVersionId, input, signal)
-    return await storage.getAsset(uploadId, completed.assetId, input, signal)
+    return await readAsset(uploadId, completed.assetId)
   } catch (error) {
     // A Complete response may be lost after committing an Asset. Never abort that uncertain outcome.
     if (uploadId !== null && !completeAttempted && !(error instanceof ProjectResourceError && error.code === "resource_upload_aborted")) {

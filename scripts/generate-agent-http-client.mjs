@@ -12,12 +12,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "7bfbf5ef3febaad710007fcd88992f44333d4740"
+const ownerCommit = "3e61c0a1aa30c40d45b14e96bebde3a6ee72e145"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad"
-const provenanceDigest = "227015d780a9d9dbb93e5746690fc200bca4663bcf7736fe7b984e5bb9d08832"
-const ownerContractVersion = "8.17.0"
+const ownerDigest = "cc7b8e02f5a110cde705bdbf31e9a408e0371c08fae32798bd928a63cc90642c"
+const provenanceDigest = "dca6ca96d41561c323d4a671287625053a92a4faa3502922c2b7396e49ddf03b"
+const ownerContractVersion = "8.18.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -171,9 +171,27 @@ const agent815ResourceDescription = agent814ResourceDescription.replace(
   "No version_id, URL or content.",
   "Asset and artifact have no inline content. Final answer is only for a user chat Run and resource_id is its source assistant Message ID; exact source conversation, Run, final segment and revision are provenance, not the consumer identity. Its unmodified UTF-8 text, size and SHA-256 must agree. No version_id, URL or additional identity.",
 )
+export function restoreAgent817SharedConversationRaw(source) {
+  if (!source.includes('"version": "8.18.0"')) return source
+  assert.equal(sha256(source), ownerDigest, "Agent8.18 shared Conversation child drift")
+  const parent = source
+    .replace(/,\n          "shared_conversation_context": \{[\s\S]*?\n          \}(?=\n        \},\n        "additionalProperties": false)/u, "")
+    .replace('"version": "8.18.0"', '"version": "8.17.0"')
+  assert.equal(sha256(parent), "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad", "Agent8.17 complete raw parent drift")
+  return parent
+}
+function restoreAgent817SharedConversationContract(document) {
+  if (document.info?.version !== "8.18.0") return document
+  const parent = structuredClone(document)
+  delete parent.components.schemas.LaunchRequest.properties.shared_conversation_context
+  parent.info.version = "8.17.0"
+  assert.equal(sha256(JSON.stringify(parent)), "9f152d53e2acaaa3e3673704f39b39b9e334d945d0bfba099deca4db5c4dccc5", "Agent8.17 complete parsed parent drift")
+  return parent
+}
 function restoreAgent816WorkspaceOutputsRaw(source) {
+  source = restoreAgent817SharedConversationRaw(source)
   if (!source.includes('"version": "8.17.0"')) return source
-  assert.equal(sha256(source), ownerDigest, "Agent8.17 workspace output child drift")
+  assert.equal(sha256(source), "c471094369efa80f1182e41c67ef8150835a4544c283fd8d2d4e689707a51aad", "Agent8.17 workspace output child drift")
   const parent = source
     .replace(/,\n          "workspace_outputs": \{[\s\S]*?\n          \}(?=\n        \},\n        "additionalProperties": false)/u, "")
     .replace(/,\n      "WorkspaceOutputVersion": \{[\s\S]*?\n      \}(?=\n    \},\n    "responses")/u, "")
@@ -182,12 +200,17 @@ function restoreAgent816WorkspaceOutputsRaw(source) {
   return parent
 }
 function restoreAgent816WorkspaceOutputsContract(document) {
+  document = restoreAgent817SharedConversationContract(document)
   if (document.info?.version !== "8.17.0") return document
   const parent = structuredClone(document)
   delete parent.components.schemas.RunDisplay.properties.workspace_outputs
   delete parent.components.schemas.WorkspaceOutputVersion
   parent.info.version = "8.16.0"
-  assert.equal(sha256(JSON.stringify(parent)), "9ec3bb6b1b0c19a32cfa2d58074a2ba7aba6f3ca90ea7353bf96ac5f71851976", "Agent8.16 parsed workspace output parent drift")
+  assert.equal(
+    sha256(JSON.stringify(parent)),
+    "9ec3bb6b1b0c19a32cfa2d58074a2ba7aba6f3ca90ea7353bf96ac5f71851976",
+    "Agent8.16 parsed workspace output parent drift",
+  )
   return parent
 }
 function restoreAgent815DeliveryPathRaw(source) {
@@ -958,7 +981,17 @@ async function normalizeGeneratorCompatibility(directory) {
   ])
   const zodPath = path.join(directory, "zod.gen.ts")
   let zodSource = await readFile(zodPath, "utf8")
-  for (const schema of ["Meta", "Error", "ErrorEnvelope", "LaunchReceipt", "LaunchReceiptEnvelope", "ChatEvent", "ReplayPage", "ReplayPageEnvelope", "WorkspaceOutputVersion"]) {
+  for (const schema of [
+    "Meta",
+    "Error",
+    "ErrorEnvelope",
+    "LaunchReceipt",
+    "LaunchReceiptEnvelope",
+    "ChatEvent",
+    "ReplayPage",
+    "ReplayPageEnvelope",
+    "WorkspaceOutputVersion",
+  ]) {
     const expression = new RegExp(`(export const z${schema} = z\\.object\\(\\{[\\s\\S]*?\\n)\\}\\);`)
     assert.match(zodSource, expression, `${schema} generated object was not found`)
     zodSource = zodSource.replace(expression, "$1}).strict();")
@@ -1095,23 +1128,98 @@ async function normalizeProjectInstructionPattern(directory, document) {
   ])
 }
 
-async function normalizePersonalContextPatterns(directory, document) {
-  // Hey API 0.99 decodes these escaped UTF-16 classes into NUL and replacement
-  // characters. Restore the exact owner patterns; BFF launch paths still reject the field.
-  const schema = document.components.schemas.LaunchRequest.properties.personal_context.oneOf[1].properties
-  const patterns = [
-    [schema.profile.oneOf[1].properties.nickname.pattern, 4],
-    [schema.knowledge.properties.items.items.properties.name.pattern, 3],
-  ]
-  await normalizeFile(
-    directory,
-    "zod.gen.ts",
-    patterns.map(([pattern, count]) => {
-      const malformed = pattern.replace("\\u0000", "\u0000").replace(/\\uD(?:800|FFF)/gu, "\ufffd")
-      assert.notEqual(malformed, pattern, "Agent 8.11 escaped pattern must need normalization")
-      return [`regex(/${malformed}/)`, `regex(new RegExp(${JSON.stringify(pattern)}, "u"))`, count, "owner UTF-16 character class"]
-    }),
-  )
+async function generatePersonalContextValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.personal_context
+  const material = schema.oneOf.find((value) => value.type === "object")
+  assert.ok(material, "published personal context object missing")
+  const knowledge = material.properties.knowledge
+  assert.match(schema.description, /knowledge items have unique knowledge_id values/u, "published personal identity uniqueness changed")
+  // Lower this published personal subtree only; do not silently ignore new owner conditions.
+  const lower = (node) => {
+    if (node.oneOf) return `z.union([${node.oneOf.map(lower).join(",")}])`
+    if (node.const !== undefined) return `z.literal(${JSON.stringify(node.const)})`
+    if (node.type === "null") return "z.null()"
+    if (node.type === "boolean") return "z.boolean()"
+    if (node.type === "string")
+      return (
+        "z.string()" +
+        (node.minLength === undefined ? "" : `.min(${node.minLength})`) +
+        (node.maxLength === undefined ? "" : `.max(${node.maxLength})`) +
+        (node.pattern === undefined ? "" : `.regex(new RegExp(${JSON.stringify(node.pattern)}, "u"))`)
+      )
+    if (node.type === "integer")
+      return "z.number().int()" + (node.minimum === undefined ? "" : `.min(${node.minimum})`) + (node.maximum === undefined ? "" : `.max(${node.maximum})`)
+    if (node.type === "array") return `z.array(${lower(node.items)})` + (node.maxItems === undefined ? "" : `.max(${node.maxItems})`)
+    assert.equal(node.type, "object", "unsupported published personal schema node")
+    assert.equal(node.additionalProperties, false, "personal objects must stay closed")
+    const fields = Object.entries(node.properties).map(
+      ([key, child]) => `${JSON.stringify(key)}:${lower(child)}${node.required.includes(key) ? "" : ".optional()"}`,
+    )
+    let expression = `z.object({${fields.join(",")}}).strict()`
+    if (node === knowledge) {
+      assert.equal(node.allOf.length, 2, "published personal usage conditions changed")
+      for (const condition of node.allOf) {
+        assert.deepEqual(Object.keys(condition), ["if", "then"])
+        assert.deepEqual(Object.keys(condition.if), ["properties"])
+        assert.deepEqual(Object.keys(condition.then), ["properties"])
+        assert.deepEqual(Object.keys(condition.if.properties), ["enabled"])
+        const enabled = condition.if.properties.enabled.const
+        assert.equal(typeof enabled, "boolean")
+        const entries = Object.entries(condition.then.properties)
+        assert.equal(entries.length, 1)
+        const [field, constraint] = entries[0]
+        assert.ok(Object.hasOwn(node.properties, field))
+        let check
+        if (Object.hasOwn(constraint, "maxItems")) {
+          assert.equal(node.properties[field].type, "array")
+          assert.deepEqual(Object.keys(constraint), ["maxItems"])
+          check = `value[${JSON.stringify(field)}].length <= ${constraint.maxItems}`
+        } else {
+          assert.equal(node.properties[field].type, "integer")
+          assert.deepEqual(Object.keys(constraint), ["minimum"])
+          check = `value[${JSON.stringify(field)}] >= ${constraint.minimum}`
+        }
+        expression += `.refine(value => value.enabled !== ${JSON.stringify(enabled)} || ${check}, "Published personal usage condition")`
+      }
+      assert.ok(node.properties.items.items.properties.knowledge_id)
+      expression +=
+        '.refine(value => new Set(value.items.map(item => item.knowledge_id)).size === value.items.length, "Personal knowledge identity must be unique")'
+    } else assert.equal(node.allOf, undefined, "unsupported personal condition")
+    return expression
+  }
+  const file = path.join(directory, "zod.gen.ts")
+  const source = await readFile(file, "utf8")
+  const property = /^[ \t]*personal_context:[\s\S]*?(?=^[ \t]*project_instruction:)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated personal context field missing or duplicated")
+  await writeFile(file, source.replace(property, `personal_context: ${lower(schema)}.optional(),\n`))
+}
+
+async function generateSharedConversationContextValidator(directory, document) {
+  const schema = document.components.schemas.LaunchRequest.properties.shared_conversation_context
+  assert.equal(schema.additionalProperties, false)
+  assert.deepEqual(schema.required, ["project_ref", "conversation_id", "messages", "has_earlier_messages"])
+  const messages = schema.properties.messages,
+    item = messages.items
+  assert.equal(item.additionalProperties, false)
+  assert.deepEqual(item.required, ["message_id", "sequence", "role", "content"])
+  assert.deepEqual(item.properties.role.enum, ["user", "assistant"])
+  assert.equal(messages["x-kokoro-unique-by"], "message_id")
+  assert.equal(messages["x-kokoro-order-by"], "sequence")
+  assert.equal(messages.maxItems, 128)
+  assert.equal(messages["x-kokoro-content-utf8-max-bytes"], 262144)
+  const string = (node) =>
+    "z.string()" +
+    (node.minLength === undefined ? "" : `.min(${node.minLength})`) +
+    (node.maxLength === undefined ? "" : `.max(${node.maxLength})`) +
+    (node.pattern === undefined ? "" : `.regex(new RegExp(${JSON.stringify(node.pattern)},"u"))`)
+  const entry = `z.object({message_id:${string(item.properties.message_id)},sequence:${string(item.properties.sequence)},role:z.enum(${JSON.stringify(item.properties.role.enum)}),content:${string(item.properties.content)}}).strict()`
+  const list = `z.array(${entry}).max(${messages.maxItems}).refine(values=>new Set(values.map(value=>value.message_id)).size===values.length && values.every(value=>new RegExp(${JSON.stringify(item.properties.sequence.pattern)},"u").test(value.sequence)) && values.every((value,index)=>index===0 || BigInt(values[index-1]!.sequence)<BigInt(value.sequence)) && values.reduce((total,value)=>total+new TextEncoder().encode(value.content).byteLength,0)<=${messages["x-kokoro-content-utf8-max-bytes"]})`
+  const expression = `z.object({project_ref:${string(schema.properties.project_ref)},conversation_id:${string(schema.properties.conversation_id)},messages:${list},has_earlier_messages:z.boolean()}).strict().optional()`
+  const file = path.join(directory, "zod.gen.ts"),
+    source = await readFile(file, "utf8")
+  const property = /^[ \t]*shared_conversation_context:[\s\S]*?(?=^\}\);?$)/gmu
+  assert.equal([...source.matchAll(property)].length, 1, "generated shared Conversation property drifted")
+  await writeFile(file, source.replace(property, `  shared_conversation_context: ${expression},\n`))
 }
 
 async function generate(directory) {
@@ -1129,7 +1237,8 @@ async function generate(directory) {
   await generateMcpSelectionValidator(directory, ownerDocument)
   await generateCustomApiSelectionValidator(directory, ownerDocument)
   await generateCanonicalResourceValidator(directory, ownerDocument)
-  await normalizePersonalContextPatterns(directory, ownerDocument)
+  await generatePersonalContextValidator(directory, ownerDocument)
+  await generateSharedConversationContextValidator(directory, ownerDocument)
   await normalizeProjectInstructionPattern(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(

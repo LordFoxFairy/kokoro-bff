@@ -350,6 +350,8 @@ it("binds current task state to the complete delivered definition, not a frozen 
   const { SchedulerTaskStateReader } = await tsImport("../src/infrastructure/clients/scheduler/task-state-reader.ts", import.meta.url)
   const task = {
     id: "scheduled_current",
+    ownerId: "owner",
+    executionActorId: "owner",
     title: "Once",
     prompt: "Review",
     frequency: "once",

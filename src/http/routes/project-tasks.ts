@@ -59,25 +59,27 @@ export function parseProjectTaskWriteHeaders(method: WriteMethod, raw: readonly 
   if (keys.length !== 1 || key === undefined || !KEY.test(key)) return { kind: "invalid" }
   const matches = values("if-match")
   const contentTypes = values("content-type")
-  if (values("content-encoding").length !== 0 ||
-    ["if-none-match", "if-modified-since", "if-unmodified-since", "if-range"].some((name) => values(name).length !== 0))
+  if (
+    values("content-encoding").length !== 0 ||
+    ["if-none-match", "if-modified-since", "if-unmodified-since", "if-range"].some((name) => values(name).length !== 0)
+  )
     return { kind: "invalid" }
   if (method === "DELETE") {
     const lengths = values("content-length")
-    if (contentTypes.length !== 0 || values("transfer-encoding").length !== 0 ||
-      lengths.length > 1 || (lengths[0] !== undefined && lengths[0] !== "0")) return { kind: "invalid" }
+    if (contentTypes.length !== 0 || values("transfer-encoding").length !== 0 || lengths.length > 1 || (lengths[0] !== undefined && lengths[0] !== "0"))
+      return { kind: "invalid" }
   } else if (contentTypes.length !== 1 || !/^application\/json(?:[ \t]*;[ \t]*charset=utf-8)?$/iu.test(contentTypes[0] ?? "")) {
     return { kind: "invalid" }
   }
   if (method === "POST") return matches.length === 0 ? { kind: "ok", key } : { kind: "invalid" }
   if (matches.length === 0) return { kind: "missing-precondition" }
   const tag = matches[0]
-  if (matches.length !== 1 || !tag?.startsWith('"') || !tag.endsWith('"') || !projectTaskRevisionPattern.test(tag.slice(1, -1)))
-    return { kind: "invalid" }
+  if (matches.length !== 1 || !tag?.startsWith('"') || !tag.endsWith('"') || !projectTaskRevisionPattern.test(tag.slice(1, -1))) return { kind: "invalid" }
   return { kind: "ok", key, revision: tag.slice(1, -1) }
 }
 
 const taskErrors = {
+  project_edit_forbidden: [403, "Project cannot be edited"],
   project_not_found: [404, "Project was not found"],
   project_task_not_found: [404, "Project task was not found"],
   idempotency_conflict: [409, "Idempotency key was used for different input"],
@@ -100,8 +102,7 @@ export async function handleProjectTaskRequest(
   const projectId = match?.[1]
   const taskSegment = match?.[2]
   if (method !== "GET" && method !== "POST" && method !== "PATCH" && method !== "DELETE") return false
-  if (projectId === undefined ||
-    (taskSegment === undefined ? method !== "GET" && method !== "POST" : method !== "PATCH" && method !== "DELETE")) return false
+  if (projectId === undefined || (taskSegment === undefined ? method !== "GET" && method !== "POST" : method !== "PATCH" && method !== "DELETE")) return false
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const fail = (status: number, code: string, message: string, retryAfter?: string): void => {
@@ -120,8 +121,12 @@ export async function handleProjectTaskRequest(
   try {
     let taskId: string | undefined
     if (taskSegment !== undefined) {
-      try { taskId = decodeURIComponent(taskSegment) }
-      catch { invalid(); return true }
+      try {
+        taskId = decodeURIComponent(taskSegment)
+      } catch {
+        invalid()
+        return true
+      }
     }
     if (method !== "GET" && (path !== url || !PROJECT_ID.test(projectId) || (taskId !== undefined && !projectTaskIdPattern.test(taskId)))) {
       invalid()

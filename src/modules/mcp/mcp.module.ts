@@ -7,6 +7,7 @@ import {
   MCP_PERSONAL_CLIENT,
   MCP_PROJECT_PUBLICATION_CLIENT,
   CUSTOM_API_CLIENT,
+  CUSTOM_API_ADMIN_CLIENT,
   MCP_PROVIDER_ADMIN_CLIENT,
   PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   PROJECT_MCP_RECOMMENDATIONS_STORE,
@@ -18,6 +19,8 @@ import { McpPersonalConnectClient } from "../../infrastructure/clients/platform/
 import { McpPackageAdminConnectClient } from "../../infrastructure/clients/platform/mcp-package-admin-connect.js"
 import { McpProviderAdminConnectClient } from "../../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { McpProjectPublicationConnectClient } from "../../infrastructure/clients/platform/mcp-project-publication-connect.js"
+import { CustomApiAdminConnectClient } from "../../infrastructure/clients/platform/custom-api-admin-connect.js"
+import { CustomApiAdminMiddleware } from "./custom-api-admin.middleware.js"
 import { CustomApiConnectClient } from "../../infrastructure/clients/platform/custom-api-connect.js"
 import type { ProjectMcpRecommendationsStore } from "../../infrastructure/postgres/project-mcp-recommendations.js"
 import { ProjectMcpRecommendationsMiddleware } from "./project-mcp-recommendations.middleware.js"
@@ -49,11 +52,13 @@ class McpAdminRuntime implements OnApplicationShutdown {
   public constructor(
     @Inject(MCP_PROVIDER_ADMIN_CLIENT) private readonly providerClient: McpProviderAdminConnectClient | null,
     @Inject(MCP_PACKAGE_ADMIN_CLIENT) private readonly packageClient: McpPackageAdminConnectClient | null,
+    @Inject(CUSTOM_API_ADMIN_CLIENT) private readonly customApiAdminClient: CustomApiAdminConnectClient | null,
   ) {}
 
   public onApplicationShutdown(): void {
     this.providerClient?.close()
     this.packageClient?.close()
+    this.customApiAdminClient?.close()
   }
 }
 
@@ -72,6 +77,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     ProjectMcpRecommendationsMiddleware,
     ConnectorListMiddleware,
     McpAdminMiddleware,
+    CustomApiAdminMiddleware,
     McpProjectPublicationMiddleware,
     PlatformProjectionMiddleware,
     McpPersonalMiddleware,
@@ -79,6 +85,17 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     ProjectMcpRecommendationsRuntime,
     McpAdminRuntime,
     McpProjectPublicationRuntime,
+    {
+      provide: CUSTOM_API_ADMIN_CLIENT,
+      inject: [BFF_CONFIG],
+      useFactory: (config: BffConfig): CustomApiAdminConnectClient | null =>
+        config.customApiAdmin
+          ? new CustomApiAdminConnectClient(
+              config.customApiAdmin.baseUrl,
+              new PlatformServiceCredentialSource(config.customApiAdmin.credentialFile, "custom_api_admin"),
+            )
+          : null,
+    },
     {
       provide: CUSTOM_API_CLIENT,
       inject: [BFF_CONFIG],
@@ -161,6 +178,7 @@ class McpProjectPublicationRuntime implements OnApplicationShutdown {
     MCP_PACKAGE_ADMIN_CLIENT,
     MCP_PROJECT_PUBLICATION_CLIENT,
     CUSTOM_API_CLIENT,
+    CUSTOM_API_ADMIN_CLIENT,
     PROJECT_MCP_RECOMMENDATIONS_PROVIDER,
   ],
 })
@@ -171,6 +189,7 @@ export class McpModule implements NestModule {
     consumer.apply(CustomApiMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectMcpRecommendationsMiddleware).forRoutes({ path: "v1/projects/:projectId/mcp-recommendations", method: RequestMethod.ALL })
     consumer.apply(ConnectorListMiddleware).forRoutes({ path: "v1/connector.list", method: RequestMethod.GET })
+    consumer.apply(CustomApiAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(McpAdminMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(McpProjectPublicationMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
   }

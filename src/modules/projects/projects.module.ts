@@ -1,3 +1,4 @@
+import { ProjectGrantMiddleware } from "./project-grant.middleware.js"
 import { BeforeApplicationShutdown, Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
 import {
@@ -12,7 +13,7 @@ import {
   PROJECT_EXACT_DOWNLOAD_SOURCE,
   PROJECT_SCOPE_RELEASE_DISPATCHER,
   PROJECT_SCOPE_RELEASE_OUTBOX,
-  PROJECT_LOOKUP,
+  PROJECT_READ_LOOKUP,
   SKILL_DOWNLOAD_HANDLES,
   SKILL_INSTALLATION_CLIENT,
   SKILL_PACKAGE_INSPECTION_CLIENT,
@@ -49,7 +50,10 @@ import type { Pool } from "pg"
 
 @Injectable()
 class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicationShutdown {
-  public constructor(@Inject(PROJECT_SCOPE_RELEASE_DISPATCHER) private readonly dispatcher: ProjectScopeReleaseOutboxDispatcher | null) {}
+  public constructor(
+    @Inject(PROJECT_SCOPE_RELEASE_DISPATCHER)
+    private readonly dispatcher: ProjectScopeReleaseOutboxDispatcher | null,
+  ) {}
 
   public onModuleInit(): void {
     this.dispatcher?.start()
@@ -68,12 +72,21 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
 @Module({
   imports: [AuthenticationModule, ChatModule, DatabaseModule, SkillsModule, ProjectAccessModule],
   providers: [
+    ProjectGrantMiddleware,
     ProjectPinMiddleware,
     ProjectMutationMiddleware,
     ProjectSkillPackageInspectionMiddleware,
     ProjectSkillDownloadMiddleware,
-    { provide: PROJECT_READS, inject: [BFF_POOL], useFactory: createProjectReadStore },
-    { provide: PROJECT_MUTATIONS, inject: [BFF_POOL], useFactory: createProjectMutationStore },
+    {
+      provide: PROJECT_READS,
+      inject: [BFF_POOL],
+      useFactory: createProjectReadStore,
+    },
+    {
+      provide: PROJECT_MUTATIONS,
+      inject: [BFF_POOL],
+      useFactory: createProjectMutationStore,
+    },
     {
       provide: PROJECT_RENAME,
       inject: [BFF_DATABASE],
@@ -87,7 +100,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
     },
     {
       provide: PROJECT_EXACT_DOWNLOAD_SOURCE,
-      inject: [BFF_CONFIG, PROJECT_LOOKUP, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_DOWNLOAD_HANDLES],
+      inject: [BFF_CONFIG, PROJECT_READ_LOOKUP, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_DOWNLOAD_HANDLES],
       useFactory: (
         config: BffConfig,
         projectService: ProjectLookup,
@@ -102,7 +115,13 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
           projectInstallation: {
             resolve: async (projectId, installationId, context, signal) => {
               signal.throwIfAborted()
-              const project = await projectService.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, projectId)
+              const project = await projectService.find(
+                {
+                  tenantId: context.identity.namespace,
+                  subjectId: context.identity.userId,
+                },
+                projectId,
+              )
               signal.throwIfAborted()
               if (!project || project.id !== projectId) return null
               const owner = await installations.get(
@@ -117,7 +136,13 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
               )
               if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
               const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
-              const current = await projectService.find({ tenantId: context.identity.namespace, subjectId: context.identity.userId }, projectId)
+              const current = await projectService.find(
+                {
+                  tenantId: context.identity.namespace,
+                  subjectId: context.identity.userId,
+                },
+                projectId,
+              )
               signal.throwIfAborted()
               return current?.id === projectId ? record : null
             },
@@ -178,6 +203,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
 })
 export class ProjectsModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ProjectGrantMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectMutationMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectPinMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })
     consumer.apply(ProjectSkillDownloadMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL })

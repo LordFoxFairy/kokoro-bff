@@ -21,6 +21,8 @@ function adminBusinessRoute(method: string, target: string): boolean {
   } catch {
     return false
   }
+  if (method === "GET" && /^\/v1\/admin\/custom-apis(?:\/[^/]+(?:\/audit-events)?)?$/u.test(path)) return true
+  if (method === "POST" && /^\/v1\/admin\/custom-apis\/[^/]+\/(quarantine|restore|revoke)$/u.test(path)) return true
   if (method === "GET" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/uploads\/[^/]+$/u.test(path)) return true
   if (method === "POST" && /^\/v1\/admin\/mcp\/packages\/[^/]+\/(uploads|publish|uploads\/[^/]+\/(complete|abort))$/u.test(path)) return true
   if (
@@ -37,6 +39,7 @@ function adminBusinessRoute(method: string, target: string): boolean {
     return true
   if (method === "POST" && /^\/v1\/admin\/model-revisions\/[0-9a-f-]{36}\/publish$/iu.test(path)) return true
   if (method === "PATCH" && /^\/v1\/admin\/model-labels\/[0-9a-f-]{36}$/iu.test(path)) return true
+  if (method === "PATCH" && /^\/v1\/admin\/model-revisions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(path)) return true
   if (method === "GET" && (path === "/v1/me" || path === "/browser/v1/auth/session")) return true
   if (method === "POST" && path === "/v1/admin/billing/credit-grants") return true
   if (method === "GET" && path === "/v1/admin/billing/metering/pricing") return true
@@ -51,6 +54,7 @@ function adminBusinessRoute(method: string, target: string): boolean {
       "/v1/admin/identity/members",
       "/v1/admin/identity/invitations",
       "/v1/admin/identity/roles",
+      "/v1/admin/identity/audit-events",
     ].includes(path)
   )
     return true

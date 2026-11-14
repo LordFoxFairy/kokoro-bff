@@ -981,3 +981,128 @@ test("Artifact route ends a stalled consumer socket after headers without report
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test("Project FINAL download drops a verified spool when the current reader loses its exact association", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactDownloadRoute } = await import("../src/http/routes/library-artifact-download.ts")
+  const candidate = {
+    conversationId: "conversation-1",
+    artifactId: "artifact-1",
+    runId: "run-1",
+    sourceAssetId: "asset-1",
+    sourceArtifactKind: "document",
+    sourceContentSha256: sha,
+    deliveredAt: "2026-11-13T00:00:00.000Z",
+    favorited: false,
+    projectRef: "project-1",
+    projectAccess: { project_id: "project-1", role: "viewer", expires_at: null, access_version: "2", capabilities: ["read"] },
+  }
+  let available = true,
+    cleanups = 0
+  const repository = { findCandidate: async () => (available ? candidate : null) }
+  const clientFactory = () => ({
+    get: async () => ({
+      kind: "artifact",
+      conversation_id: "conversation-1",
+      artifact_id: "artifact-1",
+      asset_id: "asset-1",
+      artifact_kind: "document",
+      title: "Result",
+      filename: "result.txt",
+      mime_type: "text/plain",
+      size_bytes: String(bytes.length),
+      content_sha256: sha,
+      source_run_id: "run-1",
+      delivered_at: candidate.deliveredAt,
+    }),
+    downloadReference: async () => ({}),
+  })
+  const server = createServer(
+    (req, res) =>
+      void libraryArtifactDownloadRoute(
+        req,
+        res,
+        { storage },
+        { requestId: "project-revoke", identity },
+        repository,
+        "conversation-1",
+        "artifact-1",
+        clientFactory,
+        async () => {
+          available = false
+          return {
+            cleanup: async () => {
+              cleanups++
+            },
+            path: "not-a-real-spool",
+          }
+        },
+      ),
+  )
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const result = await fetch(`http://127.0.0.1:${server.address().port}/v1/library/artifacts/conversation-1/artifact-1/content`)
+    assert.equal(result.status, 404)
+    assert.equal((await result.json()).error.code, "library_artifact_not_found")
+    assert.equal(cleanups, 1)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test("Project FINAL metadata uses the shared closed view rather than the producer's private favorite and asset ID", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactRoute } = await import("../src/http/routes/library-artifact.ts")
+  const projectAccess = { project_id: "project-1", role: "viewer", expires_at: null, access_version: "2", capabilities: ["read"] }
+  const association = {
+    conversationId: "conversation-1",
+    artifactId: "artifact-1",
+    runId: "run-1",
+    sourceAssetId: "private-asset",
+    sourceArtifactKind: "document",
+    sourceContentSha256: sha,
+    deliveredAt: "2026-11-13T00:00:00.000Z",
+    favorited: false,
+    projectRef: "project-1",
+    projectAccess,
+  }
+  const repository = { findCandidate: async () => association }
+  const item = {
+    kind: "artifact",
+    conversation_id: "conversation-1",
+    artifact_id: "artifact-1",
+    asset_id: "private-asset",
+    artifact_kind: "document",
+    title: "Result",
+    filename: "result.txt",
+    mime_type: "text/plain",
+    size_bytes: String(bytes.length),
+    content_sha256: sha,
+    source_run_id: "run-1",
+    delivered_at: association.deliveredAt,
+  }
+  const server = createServer(
+    (req, res) =>
+      void libraryArtifactRoute(req, res, { storage }, { requestId: "project-read", identity }, repository, "conversation-1", "artifact-1", () => ({
+        get: async () => item,
+      })),
+  )
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const result = await fetch(`http://127.0.0.1:${server.address().port}/v1/library/artifacts/conversation-1/artifact-1`)
+    assert.equal(result.status, 200)
+    const { data } = await result.json()
+    assert.deepEqual(data.project_access, projectAccess)
+    assert.equal(data.asset_id, undefined)
+    assert.equal(data.favorited, undefined)
+    assert.equal(data.title, "Result")
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
