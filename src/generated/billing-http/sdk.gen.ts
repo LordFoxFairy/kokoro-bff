@@ -3,6 +3,9 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  CloseUnreservedModelAdmissionData,
+  CloseUnreservedModelAdmissionErrors,
+  CloseUnreservedModelAdmissionResponses,
   CreateAdminCreditGrantData,
   CreateAdminCreditGrantErrors,
   CreateAdminCreditGrantResponses,
@@ -38,6 +41,7 @@ import type {
   SettleModelAdmissionResponses,
 } from "./types.gen.js"
 import {
+  zCloseUnreservedModelAdmissionResponse,
   zCreateAdminCreditGrantResponse,
   zCreateAdmissionResponse,
   zGetAdminMeteringPricingResponse,
@@ -210,6 +214,39 @@ export const createAdmission = <ThrowOnError extends boolean = false>(
       { name: "x-kokoro-subject", type: "apiKey" },
     ],
     url: "/v1/internal/billing/admissions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Permanently close the original unfunded command and prevent late admission
+ *
+ * Permanently fence the original unfunded budget command. No reservation, usage, settlement, or money effect. The trusted Agent initiator owns execution eligibility; Billing attests only its command facts.
+ */
+export const closeUnreservedModelAdmission = <ThrowOnError extends boolean = false>(
+  options: Options<CloseUnreservedModelAdmissionData, ThrowOnError>,
+): RequestResult<CloseUnreservedModelAdmissionResponses, CloseUnreservedModelAdmissionErrors, ThrowOnError> =>
+  (options.client ?? client).post<CloseUnreservedModelAdmissionResponses, CloseUnreservedModelAdmissionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCloseUnreservedModelAdmissionResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      { name: "x-kokoro-subject", type: "apiKey" },
+    ],
+    url: "/v1/internal/billing/admissions/close-unreserved",
     ...options,
     headers: {
       "Content-Type": "application/json",

@@ -8,7 +8,7 @@ test("fixed owner includes a distinct recover-only operation rather than a proof
 })
 test("internal recover is Agent-only and reuses closed original schemas without a proof header", async () => {
   const doc = load(await readFile(new URL("../contract/openapi/internal/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(doc.info.version, "1.3.0")
+  assert.equal(doc.info.version, "1.4.0")
   const op = doc.paths["/internal/v1/model-admissions/recover"].post
   assert.equal(op.operationId, "recoverAgentModelAdmission")
   assert.equal(op["x-kokoro-permission"], "agent.model_admission_recovery")

@@ -16,13 +16,15 @@ import {
   agentModelSettlementRequest,
   agentModelSettlementResponse,
   agentModelSettlementError,
+  agentModelUnreservedCloseRequest,
+  agentModelUnreservedCloseResponse,
 } from "../src/http/model-admission.contract.ts"
 const json = (schema) => z.toJSONSchema(schema, { target: "draft-2020-12" })
 const content = (schema) => ({ "application/json": { schema } })
 const response = (description, schema) => ({ description, headers: { "x-request-id": { schema: { type: "string" } } }, content: content(schema) })
 const doc = {
   openapi: "3.1.0",
-  info: { title: "Kokoro BFF internal project execution binding", version: "1.3.0" },
+  info: { title: "Kokoro BFF internal project execution binding", version: "1.4.0" },
   paths: {
     "/internal/v1/model-admissions": {
       post: {
@@ -85,6 +87,39 @@ const doc = {
             code,
             response(description, {
               $ref: code === 200 ? "#/components/schemas/AgentModelAdmissionResponse" : "#/components/schemas/AgentModelAdmissionError",
+            }),
+          ]),
+        ),
+      },
+    },
+    "/internal/v1/model-admissions/close-unreserved": {
+      post: {
+        operationId: "closeUnreservedAgentModelAdmission",
+        summary: "Permanently close the original unreserved budget command without settlement or usage inference",
+        description:
+          "Only an explicit Agent recovery operator may use this action after its durable eligibility checks. The original Idempotency-Key must equal request_ref. Execution proof and retired consumption headers are forbidden. An unknown ACK is recovered only by replaying this original command.",
+        "x-kokoro-owner": "kokoro-bff",
+        "x-kokoro-visibility": "internal",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "permanent-billing-command-receipt",
+        "x-kokoro-permission": "agent.model_admission_recovery",
+        security: [{ AgentModelAdmissionBearer: [] }],
+        parameters: [{ in: "header", name: "Idempotency-Key", required: true, schema: { type: "string", minLength: 8, maxLength: 128, pattern: "^[!-~]+$" } }],
+        requestBody: { required: true, content: content({ $ref: "#/components/schemas/AgentModelUnreservedCloseRequest" }) },
+        responses: Object.fromEntries(
+          [
+            [200, "Original nonmonetary no-reservation closure"],
+            [400, "Invalid closed request or original key mismatch"],
+            [403, "Dedicated service or original payer denied"],
+            [404, "Original submission not visible"],
+            [409, "Original command conflict or reservation already exists"],
+            [422, "Original command is ineligible for unreserved closure"],
+            [502, "Invalid owner closure acknowledgement"],
+            [503, "Dependency or shared deadline unavailable"],
+          ].map(([code, description]) => [
+            code,
+            response(description, {
+              $ref: code === 200 ? "#/components/schemas/AgentModelUnreservedCloseResponse" : "#/components/schemas/AgentModelAdmissionError",
             }),
           ]),
         ),
@@ -174,6 +209,8 @@ const doc = {
       AgentModelSettlementRequest: json(agentModelSettlementRequest),
       AgentModelSettlementResponse: json(agentModelSettlementResponse),
       AgentModelSettlementError: json(agentModelSettlementError),
+      AgentModelUnreservedCloseRequest: json(agentModelUnreservedCloseRequest),
+      AgentModelUnreservedCloseResponse: json(agentModelUnreservedCloseResponse),
       AgentModelAdmissionRequest: json(agentModelAdmissionRequest),
       AgentModelAdmissionResponse: json(agentModelAdmissionResponse),
       AgentModelAdmissionError: json(agentModelAdmissionError),
@@ -189,4 +226,4 @@ if (process.argv.includes("--write")) {
   await mkdir(dirname(output), { recursive: true })
   await writeFile(output, body)
 } else if ((await readFile(output, "utf8")) !== body) throw Error("BFF project execution contract drift")
-console.log(`BFF internal1.3.0 ${createHash("sha256").update(body).digest("hex")}`)
+console.log(`BFF internal1.4.0 ${createHash("sha256").update(body).digest("hex")}`)

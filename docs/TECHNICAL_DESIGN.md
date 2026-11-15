@@ -1,3 +1,9 @@
+## 2026-11-15 原未预占预算审计关闭（设计已批准，候选未激活）
+
+沿现 AgentRunsModule 的专用 Agent 入口新增 `POST /internal/v1/model-admissions/close-unreserved`，窄 client 只调用 Billing 的对应 owner 动作；原 reserve/recover/settle 不改变语义。credential 每请求鲜读取得可信 tenant，再从本仓原提交事实取得真实 actor；无新 IAM/OAuth/token/proof 或浏览器认证。原六 prepared binding 与 exact evidence tuple 及原 key 透传，key 必须等于 request_ref。请求与响应由固定正式 Billing artifact 正规生成；BFF code-first 内部 artifact 追加此动作为1.4，不改 public29.1。
+
+Billing唯一裁决原命令未创建预占且永久禁止迟到 admit；Agent operator 在独立持久事务核 eligible terminal/not_dispatched/requested_unknown 与原 evidence 后关联 nonmonetary closure。BFF不读取Agent/Billing数据库或放宽prepared reader，不称该回执证明usage或结算。复用现10秒上界、断连取消、有限响应及零自动重试；ACK未知保原body/key，既有资金效果拒绝并留给原流程，不自动reserve/settle/refund。正常资源与两笔历史应用由Root后继验收。
+
 ## 2026-11-13 B13：当前租户 IAM 审计读取（源码候选，待Root验收激活）
 
 AccountModule 现 Admin identity 读取内增加具名 audit 分支，不扩大 TeamReadKind，不增 DI/认证层。Browser→Admin 同源→BFF 原 native Session 准入，每请求要求 platformAdmin；BFF→IAM 沿既有 bff_user_context 服务凭据与可信 actor/tenant，不传 Cookie、Origin、Bearer 或 Session-ref。IAM 在其有界事务重查当前 User/active Tenant/Member/platformAdmin，旧 OAuth user/operator 审计用途保持独立，不据 BFF 布尔快照授予读取。
