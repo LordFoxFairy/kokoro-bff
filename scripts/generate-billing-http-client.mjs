@@ -12,9 +12,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "b7c9858844df4c9b99e40e16bd9984b1d268b503"
+const ownerCommit = "f211d72844eb413bf950b132ad36e73798947413"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
+const ownerDigest = "02a495b7021293cec43cba77e0e9276799a9b7bab153d0fe4d2f6443b811b90d"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -177,6 +177,9 @@ async function closeOwnerResponseSchemas(directory) {
     "AdmissionResponse",
     "AdmissionSettlementRequest",
     "AdmissionSettlementResponse",
+    "AdmissionUnreservedCloseRequest",
+    "AdmissionUnreservedClosure",
+    "AdmissionUnreservedCloseResponse",
   ]) {
     source = closeGeneratedObject(source, schemaName)
   }
@@ -209,13 +212,19 @@ async function closeOwnerResponseSchemas(directory) {
   }
   // The generator omits JSON Schema `not` and uses UTF-16 maxLength. Preserve the fixed owner's exact rules, not a second editable wire schema.
   const ownerSchemas = load(await readFile(vendorPath, "utf8")).components.schemas
-  for (const name of ["AdmissionSettlementRequest", "AdmissionSettlement"]) {
+  for (const name of ["AdmissionSettlementRequest", "AdmissionSettlement", "AdmissionUnreservedCloseRequest", "AdmissionUnreservedClosure"]) {
     const start = source.indexOf(`export const z${name} =`)
     assert.ok(start >= 0, `Settlement validator ${name} missing`)
     const next = source.indexOf("export const ", start + 1)
     const end = next < 0 ? source.length : next
     let block = source.slice(start, end)
-    block = replaceExactInSource(block, ".max(512)", ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })", 1, `${name} Run code-point bound`)
+    block = replaceExactInSource(
+      block,
+      ".max(512)",
+      ".refine((value) => [...value].length <= 512).meta({ maxLength: 512 })",
+      name.startsWith("AdmissionUnreserved") ? 2 : 1,
+      `${name} identity code-point bounds`,
+    )
     const not = ownerSchemas[name].properties.evidence_revision.not
     assert.equal(typeof not.pattern, "string")
     block = replaceExactInSource(
@@ -325,6 +334,7 @@ async function generate(directory) {
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
     [
+      "closeUnreservedModelAdmission",
       "createAdminCreditGrant",
       "createAdmission",
       "getAdminMeteringPricing",
@@ -365,7 +375,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "4.0.0-experimental.10",
+      contract_version: "4.0.0-experimental.11",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

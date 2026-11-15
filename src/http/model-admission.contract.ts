@@ -1,5 +1,12 @@
 import { z } from "zod"
-import { zAdmissionCreateRequest, zAdmissionResponse, zAdmissionSettlementRequest, zAdmissionSettlementResponse } from "../generated/billing-http/zod.gen.js"
+import {
+  zAdmissionCreateRequest,
+  zAdmissionResponse,
+  zAdmissionSettlementRequest,
+  zAdmissionSettlementResponse,
+  zAdmissionUnreservedCloseRequest,
+  zAdmissionUnreservedCloseResponse,
+} from "../generated/billing-http/zod.gen.js"
 
 // The fixed Billing publication owns these two wire shapes; no second editable copy.
 export const agentModelAdmissionRequest = zAdmissionCreateRequest
@@ -41,3 +48,6 @@ export const agentModelSettlementError = agentModelAdmissionError.extend({
     ]),
   }),
 })
+
+export const agentModelUnreservedCloseRequest = zAdmissionUnreservedCloseRequest
+export const agentModelUnreservedCloseResponse = zAdmissionUnreservedCloseResponse

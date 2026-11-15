@@ -1,3 +1,9 @@
+## 2026-11-15 Internal1.4 原未预占预算关闭（候选，待正式配对）
+
+新增 Agent-only `POST /internal/v1/model-admissions/close-unreserved`，operationId `closeUnreservedAgentModelAdmission`。复用专用服务 credential、可信 tenant 与原Run提交者；Idempotency-Key 必须为原 request_ref，proof/retired consumption header禁止。严格 `AdmissionUnreservedCloseRequest` 是原六prepared绑定加 evidence_event_id/evidence_revision/evidence_digest；无自报tenant/actor、金额或usage。200独立 `AdmissionUnreservedCloseResponse` 的data只含原九字段与closure_ref/status=unreserved_closed/closed_at；非AdmissionResponse或settlement ACK，不产生资金字段。错误沿现model_admission_*闭集，未知仅原命令重放，不自动fallback。原recover 200 held ACK/404瞬时miss保持；public29.1与Project binding原操作不变。
+
+唯一字段事实源为Billing正式canonical，BFF窄schema引用固定生成Zod，内部OpenAPI由原project-execution generator正规派生为1.4。owner正式commit与digest必须先固定，再发行BFF内部artifact供Agent生成消费；不使用未提交工作树SHA或手改生成物。定向HTTP证明闭集、逐binding核等、原body/key/真实actor、禁proof、取消/超时；loopback fixture不称真实跨owner验收。
+
 ## 2026-11-13 B13：IAM 审计公开投影（源码候选，待BFF正式发行）
 
 本片追加 Public29.1 的 GET /v1/admin/identity/audit-events，operationId=listAdminIdentityAuditEvents。只收 limit（1–100，默认25）和 opaque cursor（1–2048）；重复、未知query、body及客户端 tenant/site 参数拒绝。成功 data={items,next_cursor}，meta 沿现请求关联；items 仅 IAM 原安全事件字段（事件/operation、phase、tenant/actor/client、method/route、resource、result_code、request/trace、UTC created_at），无 details、正文、凭据或前后值。游标只由 IAM owner 生成/校验，不是权限凭证；每页重新准入。

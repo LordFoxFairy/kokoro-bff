@@ -3,10 +3,11 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { AgentRunsReader } from "../../infrastructure/postgres/project-execution-binding.js"
 import { agentModelAdmissionCredentialTenant } from "../../auth/agent-model-admission-credential.js"
 import { requestBillingModelSettlement } from "../../infrastructure/clients/owner/billing-model-settlement.js"
+import { closeUnreservedBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-unreserved-close.js"
 import { recoverBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-admission-recovery.js"
 import { requestBillingModelAdmission } from "../../infrastructure/clients/owner/billing-model-admission.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
-import { agentModelAdmissionRequest, agentModelSettlementRequest } from "../model-admission.contract.js"
+import { agentModelAdmissionRequest, agentModelSettlementRequest, agentModelUnreservedCloseRequest } from "../model-admission.contract.js"
 import { readBody, requestId } from "../request.js"
 import { send } from "../response.js"
 
@@ -20,8 +21,9 @@ export async function agentModelAdmissionRoute(
   const settlementId = /^\/internal\/v1\/model-admissions\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/settle$(?![\s\S])/u.exec(
     request.url ?? "",
   )?.[1]
+  const closing = request.url === "/internal/v1/model-admissions/close-unreserved"
   const recovering = request.url === "/internal/v1/model-admissions/recover"
-  const settling = !recovering && (request.url ?? "").startsWith("/internal/v1/model-admissions/")
+  const settling = !recovering && !closing && (request.url ?? "").startsWith("/internal/v1/model-admissions/")
   const id = requestId(request)
   response.setHeader("x-request-id", id)
   const failure = (status: number, code: string) => {
@@ -34,7 +36,7 @@ export async function agentModelAdmissionRoute(
         },
       })
   }
-  if (request.method !== "POST" || (settling ? settlementId === undefined : !recovering && request.url !== "/internal/v1/model-admissions")) {
+  if (request.method !== "POST" || (settling ? settlementId === undefined : !recovering && !closing && request.url !== "/internal/v1/model-admissions")) {
     failure(400, "invalid_request")
     return
   }
@@ -62,7 +64,9 @@ export async function agentModelAdmissionRoute(
   if (
     !key ||
     !/^[\x21-\x7e]{8,128}$(?![\s\S])/u.test(key) ||
-    (settling || recovering ? request.headers["x-billing-execution-proof"] !== undefined : !proof || !/^[\x21-\x7e]{1,16384}$(?![\s\S])/u.test(proof)) ||
+    (settling || recovering || closing
+      ? request.headers["x-billing-execution-proof"] !== undefined
+      : !proof || !/^[\x21-\x7e]{1,16384}$(?![\s\S])/u.test(proof)) ||
     request.headers["x-billing-consumption-token"] !== undefined ||
     mime?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json" ||
     !/^[A-Za-z0-9._:-]{1,128}$(?![\s\S])/u.test(id)
@@ -96,19 +100,25 @@ export async function agentModelAdmissionRoute(
         const bytes = await readBody(request, 16_384)
         if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) throw new Error("model_admission_invalid_json")
         const input = strictParseRawJson(bytes)
-        // Only a first reservation needs proof; recovery and settlement must not acquire execution authority.
+        // Only a first reservation needs proof; recovery, closure and settlement must not acquire execution authority.
         body =
           settlementId !== undefined
             ? { kind: "settle" as const, admissionId: settlementId, body: agentModelSettlementRequest.parse(input) }
-            : recovering
-              ? { kind: "recover" as const, body: agentModelAdmissionRequest.parse(input) }
-              : { kind: "admit" as const, body: agentModelAdmissionRequest.parse(input), proof: proof! }
+            : closing
+              ? { kind: "close" as const, body: agentModelUnreservedCloseRequest.parse(input) }
+              : recovering
+                ? { kind: "recover" as const, body: agentModelAdmissionRequest.parse(input) }
+                : { kind: "admit" as const, body: agentModelAdmissionRequest.parse(input), proof: proof! }
       } catch {
         check()
         failure(400, "invalid_request")
         return
       }
       check()
+      if (body.kind === "close" && key !== body.body.request_ref) {
+        failure(400, "invalid_request")
+        return
+      }
       const origin = await source.readSubmittedAgentRun({ tenantId: tenant, runId: body.body.run_id, signal })
       check()
       if (!origin || origin.tenantId !== tenant || origin.runId !== body.body.run_id) {
@@ -119,9 +129,11 @@ export async function agentModelAdmissionRoute(
       const result =
         body.kind === "admit"
           ? await requestBillingModelAdmission(config, context, body.body, key, body.proof, signal, deadlineAt)
-          : body.kind === "recover"
-            ? await recoverBillingModelAdmission(config, context, body.body, key, signal, deadlineAt)
-            : await requestBillingModelSettlement(config, context, body.admissionId, body.body, key, signal, deadlineAt)
+          : body.kind === "close"
+            ? await closeUnreservedBillingModelAdmission(config, context, body.body, key, signal, deadlineAt)
+            : body.kind === "recover"
+              ? await recoverBillingModelAdmission(config, context, body.body, key, signal, deadlineAt)
+              : await requestBillingModelSettlement(config, context, body.admissionId, body.body, key, signal, deadlineAt)
       check()
       if (!result.ok) {
         failure(result.status, result.code.replace(/^model_(?:admission|settlement)_/u, ""))

@@ -1,3 +1,7 @@
+## 2026-11-15 原未预占预算关闭（无BFF数据变更）
+
+BFF不新增表/列/Schema/receipt/缓存/队列，不写Billing或Agent事实。仅以现readSubmittedAgentRun按credential可信tenant与run精确读取原提交者，向Billing传原命令和evidence引用。Billing拥有永久nonmonetary closure/fence；Agent拥有独立恢复关闭事实及与原evidence digest的关联。unknown/not_dispatched与sealed bytes不改写，usage不补0、不伪造settlement ACK；历史其他pending和资金事项不纳入自动关闭。跨owner HTTP不是分布式原子事务，ACK丢失通过原身份重放；正常数据库和资源由Root独占操作。
+
 ## 2026-11-13 B13：IAM 审计无 BFF 持久化（本片源码边界）
 
 IAM AuditEvent、User/Member/Organization 与当前 platformAdmin 仍归 IAM。BFF 仅在当前请求投影经 owner 验证的安全页及 opaque cursor，不存事件副本、资格缓存、cursor 映射、审计库或新 Schema；不访问 IAM 数据库。分页按 owner 的 created_at DESC/id DESC，页间是当前事实而非整个翻页过程的固定快照。撤权后下一次请求拒绝，不能收回已向获准人展示的历史字节。

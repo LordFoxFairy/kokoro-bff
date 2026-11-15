@@ -20,6 +20,8 @@
 
 ## 当前源码地图
 
+原未预占预算关闭候选沿 `src/http/routes/model-admission.ts` 与 `src/infrastructure/clients/owner/billing-model-unreserved-close.ts`；Billing固定生成wire、BFF内部1.4及显式Agent operator消费，非public API/settlement。定向证据在 `test/model-admission-unreserved-close-http.test.mjs`；正常应用由Root另验。
+
 B13审计读沿现Account/admin-identity，`iam-audit-events.ts`只作现安全页的有界IAM client；正式来源与native未验边界见CURRENT。
 
 当前租户 IAM 审计读取由 Account 原 Admin identity 入口与 `src/infrastructure/clients/iam-audit-events.ts` 窄 reader 承接；

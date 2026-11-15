@@ -580,6 +580,89 @@ export const zAdmissionResponse = z
   })
   .strict()
 
+export const zAdmissionUnreservedCloseRequest = z
+  .object({
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    request_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_binding_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    planned_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    final_request_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    evidence_event_id: zUuid,
+    evidence_revision: z
+      .string()
+      .max(19)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^[1-9][0-9]*$(?![\s\S])/),
+    evidence_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+  })
+  .strict()
+
+export const zAdmissionUnreservedClosure = z
+  .object({
+    run_id: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_id: z.uuid().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/),
+    request_ref: z
+      .string()
+      .min(1)
+      .refine((value) => [...value].length <= 512)
+      .meta({ maxLength: 512 }),
+    attempt_binding_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    planned_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    final_request_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    evidence_event_id: zUuid,
+    evidence_revision: z
+      .string()
+      .max(19)
+      .refine(
+        (value) =>
+          !new RegExp(
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+          ).test(value),
+      )
+      .meta({
+        not: {
+          pattern:
+            "^(?:9[3-9][0-9]{17}|92[3-9][0-9]{16}|922[4-9][0-9]{15}|9223[4-9][0-9]{14}|92233[8-9][0-9]{13}|922337[3-9][0-9]{12}|9223372[1-9][0-9]{11}|92233720[4-9][0-9]{10}|922337203[7-9][0-9]{9}|92233720369[0-9]{8}|92233720368[6-9][0-9]{7}|922337203685[5-9][0-9]{6}|9223372036854[8-9][0-9]{5}|92233720368547[8-9][0-9]{4}|922337203685477[6-9][0-9]{3}|92233720368547759[0-9]{2}|92233720368547758[1-9][0-9]{1}|922337203685477580[8-9])$(?![\\s\\S])",
+        },
+      })
+      .regex(/^[1-9][0-9]*$(?![\s\S])/),
+    evidence_digest: z.string().regex(/^[0-9a-f]{64}$(?![\s\S])/),
+    closure_ref: zUuid,
+    status: z.literal("unreserved_closed"),
+    closed_at: zUtcInstant,
+  })
+  .strict()
+
+export const zAdmissionUnreservedCloseResponse = z
+  .object({
+    data: zAdmissionUnreservedClosure,
+  })
+  .strict()
+
 export const zPersonalTenantId = z
   .string()
   .min(5)
@@ -723,6 +806,32 @@ export const zCreateAdmissionHeaders = z.object({
  * Success
  */
 export const zCreateAdmissionResponse = zAdmissionResponse
+
+export const zCloseUnreservedModelAdmissionBody = zAdmissionUnreservedCloseRequest
+
+export const zCloseUnreservedModelAdmissionHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-service": z.literal("web-bff"),
+  "idempotency-key": z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[\x21-\x7e]{8,128}$(?![\s\S])/),
+})
+
+/**
+ * Permanent closure of the unfunded original command; no financial effect
+ */
+export const zCloseUnreservedModelAdmissionResponse = zAdmissionUnreservedCloseResponse
 
 export const zRecoverModelAdmissionBody = zAdmissionCreateRequest
 

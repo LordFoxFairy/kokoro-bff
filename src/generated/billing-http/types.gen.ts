@@ -279,6 +279,37 @@ export type AdmissionResponse = {
   data: Admission
 }
 
+export type AdmissionUnreservedCloseRequest = {
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+  evidence_event_id: Uuid
+  evidence_revision: string
+  evidence_digest: string
+}
+
+export type AdmissionUnreservedClosure = {
+  run_id: string
+  attempt_id: string
+  request_ref: string
+  attempt_binding_digest: string
+  planned_digest: string
+  final_request_digest: string
+  evidence_event_id: Uuid
+  evidence_revision: string
+  evidence_digest: string
+  closure_ref: Uuid
+  status: "unreserved_closed"
+  closed_at: UtcInstant
+}
+
+export type AdmissionUnreservedCloseResponse = {
+  data: AdmissionUnreservedClosure
+}
+
 export type PersonalTenantId = string
 
 export type PersonalSubjectId = string
@@ -550,6 +581,57 @@ export type CreateAdmissionResponses = {
 }
 
 export type CreateAdmissionResponse = CreateAdmissionResponses[keyof CreateAdmissionResponses]
+
+export type CloseUnreservedModelAdmissionData = {
+  body: AdmissionUnreservedCloseRequest
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject": string
+    "x-kokoro-service": "web-bff"
+    "idempotency-key": string
+  }
+  path?: never
+  query?: never
+  url: "/v1/internal/billing/admissions/close-unreserved"
+}
+
+export type CloseUnreservedModelAdmissionErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Conflict
+   */
+  409: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type CloseUnreservedModelAdmissionError = CloseUnreservedModelAdmissionErrors[keyof CloseUnreservedModelAdmissionErrors]
+
+export type CloseUnreservedModelAdmissionResponses = {
+  /**
+   * Permanent closure of the unfunded original command; no financial effect
+   */
+  200: AdmissionUnreservedCloseResponse
+}
+
+export type CloseUnreservedModelAdmissionResponse = CloseUnreservedModelAdmissionResponses[keyof CloseUnreservedModelAdmissionResponses]
 
 export type RecoverModelAdmissionData = {
   body: AdmissionCreateRequest

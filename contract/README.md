@@ -1,3 +1,7 @@
+## 2026-11-15 原未预占预算关闭（源码候选，未正常激活）
+
+Billing固定正式 `f211d72844eb413bf950b132ad36e73798947413` / exp11，原件SHA256 `02a495b7021293cec43cba77e0e9276799a9b7bab153d0fe4d2f6443b811b90d`；原generator正规派生十二个窄SDK操作，旧vendor退休。新增close-unreserved及独立nonmonetary closure wire，保strict/码点/int64原evidence tuple边界；原recover/settlement语义不变。BFF内部code-first1.4 raw SHA256 `16ddcd287f9b1fa230bfdb216f4ce192205a1bda9d756c9ac8288c1ad37ac502`，由现generator派生，不手改OpenAPI；删新增动作与两schema后完整1.3 parsed SHA256 `86f744223b8d8b9fea15c2c2507c2bb6591e99d1459d0cf736ee1db5e25e5bfa`，再沿原1.2/1.1/1.0逆证。public29.1原字节不变。Agent须固定主控正式BFF commit与本raw digest后生成；不以工作树候选冒发布或正常应用证据。
+
 ## Current release — Public29.1 / 228 operations
 
 Adds one current-tenant native-admin IAM audit read. The named inverse restores complete Public29.0/227 bytes and ordered inventory before the existing historical proofs. IAM is fixed to 814ba4c4/0.22 via the existing generator. No Schema or authentication protocol is added; normal native pairing remains a separate Root receipt. Private MCP feature publications retain their independently issued 573 source: the generator proves runtime feature bytes match instead of floating their provenance or re-signing artifacts. Earlier sections describe earlier checkpoints.
