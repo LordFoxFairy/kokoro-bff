@@ -20,6 +20,8 @@
 
 ## 当前源码地图
 
+IAM账户资料／会话的共同fetch预算、响应头／字节上限与取消回收只在 [`iam-account-transport.ts`](./src/infrastructure/clients/iam-account-transport.ts) 维护；[`iam-account-profile.ts`](./src/infrastructure/clients/iam-account-profile.ts) 保服务＋actor认证、10秒上限、strict raw JSON与竞态结算后断言／response补回；[`iam-account-sessions.ts`](./src/infrastructure/clients/iam-account-sessions.ts) 保专用凭据＋Cookie／Origin、5秒上限、原generated解码与race内业务映射。helper不读取身份／凭据或合并schema／错误，不扩到原NodeHTTP IAM传输及其它消费者；具名client／HTTP回归仍沿现测试入口。
+
 Projects／Skills 的 exact-download provider 分别委派 [`project-exact-download-source.factory.ts`](./src/infrastructure/clients/platform/project-exact-download-source.factory.ts)／[`skill-exact-download-source.factory.ts`](./src/infrastructure/clients/platform/skill-exact-download-source.factory.ts)，Module只负责原token与依赖装配；现 [`ExactSkillDownloadService`](./src/application/exact-skill-download.ts)仍拥有资格确认与handle生命周期。两来源下载的owner响应共用现 [`skill-product-response.ts`](./src/infrastructure/clients/platform/skill-product-response.ts) 的 `projectSkillDownloadFact`，其它既有下载策略不变。装配特征验收见 [`exact-skill-download-source.test.ts`](./test/exact-skill-download-source.test.ts)，已纳入默认测试入口。
 
 原未预占预算关闭候选沿 `src/http/routes/model-admission.ts` 与 `src/infrastructure/clients/owner/billing-model-unreserved-close.ts`；Billing固定生成wire、BFF内部1.4及显式Agent operator消费，非public API/settlement。定向证据在 `test/model-admission-unreserved-close-http.test.mjs`；正常应用由Root另验。

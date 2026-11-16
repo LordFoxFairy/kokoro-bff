@@ -90,6 +90,15 @@ test("separate current plus no other active sessions is a valid owner empty page
   fetched(response(body))
   assert.deepEqual(await requestIamAccountSessions(input()), { ok: true, data: body.data, nextCursor: null })
 })
+test("sessions retain generated JSON last-key-wins parsing before canonical projection", async () => {
+  const body = JSON.stringify(page()).replace('"session_id":"other"', '"session_id":"discarded","session_id":"other"')
+  fetched(
+    new Response(body, {
+      headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "account-client" },
+    }),
+  )
+  assert.deepEqual(await requestIamAccountSessions(input()), { ok: true, data: page().data, nextCursor: null })
+})
 test("revoke rejects wrong ID and false ACK", async () => {
   for (const data of [
     { session_id: "foreign", revoked: true },
