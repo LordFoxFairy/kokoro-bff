@@ -1,15 +1,13 @@
 import { iamUserContextHeaders } from "../../auth/iam-user-context.js"
 import { strictParseRawJson } from "../raw-json.js"
 import { isDeepStrictEqual } from "node:util"
-import { createClient } from "../../generated/iam-http/client/index.js"
+import type { createClient } from "../../generated/iam-http/client/index.js"
+import { withIamAccountTransport } from "./iam-account-transport.js"
 import { readAccountProfile, updateAccountProfile } from "../../generated/iam-http/sdk.gen.js"
 import { zApiErrorResponse, zReadAccountProfileResponse, zUpdateAccountProfileResponse } from "../../generated/iam-http/zod.gen.js"
 import type { AccountProfileInput, AccountProfileReadInput, AccountProfileReadResult, AccountProfileResult } from "./iam-account-profile.types.js"
 
-type AccountProfileTransportInput = Pick<
-  AccountProfileReadInput,
-  "baseUrl" | "credentialFile" | "tenantId" | "subjectId" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes"
->
+type AccountProfileTransportInput = Pick<AccountProfileReadInput, "baseUrl" | "requestId" | "signal" | "deadlineAt" | "maxResponseBytes">
 
 type AccountProfileTransportResult<T> = Readonly<{ ok: true; value: AccountProfileOwnerResult<T> }> | Readonly<{ ok: false; reason: "unavailable" | "invalid" }>
 
@@ -19,92 +17,23 @@ async function withAccountProfileTransport<T>(
   input: AccountProfileTransportInput,
   operation: (client: ReturnType<typeof createClient>) => Promise<AccountProfileOwnerResult<T>>,
 ): Promise<AccountProfileTransportResult<T>> {
-  if (input.baseUrl === null || input.signal.aborted || input.deadlineAt <= performance.now()) return { ok: false, reason: "unavailable" }
-  const controller = new AbortController()
-  let retired = false
-  let response: Response | undefined
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
-  let rejectBudget!: (cause: Error) => void
-  const budget = new Promise<never>((_resolve, reject) => {
-    rejectBudget = reject
-  })
-  const cancel = () => {
-    retired = true
-    controller.abort()
-    const activeReader = reader
-    reader = undefined
-    void activeReader?.cancel().catch(() => undefined)
-    try {
-      activeReader?.releaseLock()
-    } catch {
-      /* A retired read never regains ownership. */
-    }
-    if (response?.body && !response.body.locked) void response.body.cancel().catch(() => undefined)
-  }
-  const interrupt = () => {
-    cancel()
-    rejectBudget(new Error("account_profile_budget"))
-  }
-  input.signal.addEventListener("abort", interrupt, { once: true })
-  const timer = setTimeout(interrupt, Math.max(0, Math.min(10000, input.deadlineAt - performance.now())))
-  const assertActive = () => {
-    if (retired || input.signal.aborted || performance.now() >= input.deadlineAt) throw new Error("account_profile_budget")
-  }
-  const boundedFetch: typeof fetch = async (request, init) => {
-    const fetched = await fetch(request, { ...init, redirect: "manual", cache: "no-store", signal: controller.signal })
-    if (retired) {
-      void fetched.body?.cancel().catch(() => undefined)
-      throw new Error("account_profile_budget")
-    }
-    response = fetched
-    assertActive()
-    const headers = fetched.headers
-    if (
-      headers.get("x-request-id") !== input.requestId ||
-      headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json" ||
-      !headers
-        .get("cache-control")
-        ?.split(",")
-        .some((value) => value.trim().toLowerCase() === "no-store") ||
-      headers.has("location") ||
-      headers.has("set-cookie")
-    )
-      throw new Error("account_profile_response")
-    let bytes = 2
-    for (const [name, value] of headers) bytes += Buffer.byteLength(name) + Buffer.byteLength(value) + 4
-    const max = Math.min(input.maxResponseBytes, 1024 * 1024)
-    if (bytes > max) throw new Error("account_profile_response")
-    const chunks: Uint8Array[] = []
-    if (fetched.body) {
-      reader = fetched.body.getReader()
-      while (true) {
-        const chunk = await reader.read()
-        assertActive()
-        if (chunk.done) break
-        bytes += chunk.value.byteLength
-        if (bytes > max) throw new Error("account_profile_response")
-        chunks.push(chunk.value)
-      }
-      reader.releaseLock()
-      reader = undefined
-    }
-    assertActive()
-    const bytesBody = Buffer.concat(chunks)
-    strictParseRawJson(bytesBody)
-    return new Response(bytesBody, { status: fetched.status, headers })
-  }
-  try {
-    const client = createClient({ baseUrl: input.baseUrl, fetch: boundedFetch })
-    const result = await Promise.race([operation(client), budget])
-    assertActive()
-    return { ok: true, value: result.response === undefined && response !== undefined ? { ...result, response } : result }
-  } catch {
-    return { ok: false, reason: retired || input.signal.aborted || response === undefined ? "unavailable" : "invalid" }
-  } finally {
-    clearTimeout(timer)
-    input.signal.removeEventListener("abort", interrupt)
-    cancel()
-  }
+  return withIamAccountTransport(
+    {
+      baseUrl: input.baseUrl,
+      requestId: input.requestId,
+      signal: input.signal,
+      deadlineAt: input.deadlineAt,
+      maxResponseBytes: input.maxResponseBytes,
+      timeoutMs: 10000,
+      inspectResponseBody: strictParseRawJson,
+    },
+    ({ client }) => operation(client),
+    (result, { assertActive, response }) => {
+      assertActive()
+      const fetched = response()
+      return result.response === undefined && fetched !== undefined ? { ...result, response: fetched } : result
+    },
+  )
 }
 
 function mapAccountProfileError(

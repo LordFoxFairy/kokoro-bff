@@ -1,3 +1,13 @@
+## 2026-11-16 IAM 账户资料／会话重复传输收口
+
+只合并两账户客户端重复的fetch／竞态预算／header＋body字节上限／取消与reader回收到同目录单一withIamAccountTransport函数。helper只接I/O参数，认证、schema与公开错误映射仍归各client；不读环境／凭据／actor、不建SDK、Base类、port或多层框架，不改现NodeHTTP IAM传输及其它消费者。资料保服务＋actor无Cookie、10秒上限、strictParseRawJson、generated response缺失补回；会话保account_sessions专用凭据＋Cookie／Origin、5秒上限、原generated JSON与raw response分类／Retry-After。API／generated／Schema／依赖／lock、其它仓和Mori不变。
+
+实现第一候选虽过原63项，独立审查仍发现profile断言被移到race内部的微任务窗口；已修为helper在await race后、finally前同步onResult，profile原assertActive＋backfill整体在此处，会话不传hook且映射仍race内。按原完成位置作结构复核，不将原63绿或虚构RED当此窗口的证明；没有增加私有微任务链耦合测试。保预取消／过期零I/O、非合作fetch／body迟到回收、原错误元组及cleanup顺序。
+
+主控原客户端基线61 PASS；只补两项原实现已过的特征（profile GET／PATCH无response503与坏JSON502、session原JSON last-key-wins），测试agent改前63 PASS并停写。主控最终停写5输入SHA核等，相关client／HTTP四文件79 PASS／0 FAIL／0 SKIP，现architecture 111 PASS／0 FAIL／0 SKIP；正式lint／types／build、五文件正式格式flags及diff通过，修正后独立审查CLEAR。曾误用默认Prettier参数的旧样式报错已核原HEAD同样失败，未格式写入，最终按仓no-semi／160通过。HTTP IAM端为明确loopback fixture，不称正常IAM／浏览器／真实PG验收；未跑全默认／契约生成／模型／PG／部署或重启业务服务。
+
+导航与Root TODO同步，主控收据留Root ignored var/dev/iam-account-transport-cleanup。源码沿BFF本需求PR交付，Root后置精确gitlink／实际blob配对；最终merge与本轮topic清理由Git回执确认，不预写未来SHA。既有已完成业务Goal与条件暂存不变。
+
 ## 2026-11-16 Projects／Skills exact-download 装配收口
 
 本轮只重构现下载装配，不改业务语义：两个Module保原token／inject顺序，分别委派platform既有目录中的具名Project／Skill source factory；复用原ExactSkillDownloadService，不增SDK、Base类、空port或第二业务层。原两处owner下载响应在现skill-product-response内归为projectSkillDownloadFact，保递归known-wire与timestamp校验。缺配置null、storageObjectOrigin优先级、Project按原tenant／subject前后鲜验与owner projectRef检查、managed 404/null／502/503及share active/exact资格、signal／deadline与错误映射原样。公开／私有契约、Schema、生成物、依赖与lock不变；package.json仅把新增测试纳入默认显式列表，未改其它脚本。

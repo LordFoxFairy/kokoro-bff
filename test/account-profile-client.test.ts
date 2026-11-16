@@ -157,6 +157,27 @@ test("wrong status/code and duplicate raw JSON and invalid UTF8 cannot pass owne
     assert.equal((await requestIamAccountProfile(input())).ok, false)
   }
 })
+test("profile GET and PATCH distinguish missing owner responses from malformed received JSON", async () => {
+  for (const operation of [() => requestIamAccountProfileRead(readInput()), () => requestIamAccountProfile(input())]) {
+    let calls = 0
+    globalThis.fetch = async () => {
+      calls++
+      throw new Error("profile-transport-private")
+    }
+    assert.deepEqual(await operation(), { ok: false, status: 503, code: "account_profile_unavailable" })
+    assert.equal(calls, 1)
+
+    calls = 0
+    globalThis.fetch = async () => {
+      calls++
+      return new Response("{", {
+        headers: { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "profile-client" },
+      })
+    }
+    assert.deepEqual(await operation(), { ok: false, status: 502, code: "account_profile_response_invalid" })
+    assert.equal(calls, 1)
+  }
+})
 test("noncooperative fetch obeys absolute budget and cancels late body without retry", async () => {
   let resolve!: (value: Response) => void
   let cancelled = false
