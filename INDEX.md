@@ -20,6 +20,8 @@
 
 ## 当前源码地图
 
+Projects／Skills 的 exact-download provider 分别委派 [`project-exact-download-source.factory.ts`](./src/infrastructure/clients/platform/project-exact-download-source.factory.ts)／[`skill-exact-download-source.factory.ts`](./src/infrastructure/clients/platform/skill-exact-download-source.factory.ts)，Module只负责原token与依赖装配；现 [`ExactSkillDownloadService`](./src/application/exact-skill-download.ts)仍拥有资格确认与handle生命周期。两来源下载的owner响应共用现 [`skill-product-response.ts`](./src/infrastructure/clients/platform/skill-product-response.ts) 的 `projectSkillDownloadFact`，其它既有下载策略不变。装配特征验收见 [`exact-skill-download-source.test.ts`](./test/exact-skill-download-source.test.ts)，已纳入默认测试入口。
+
 原未预占预算关闭候选沿 `src/http/routes/model-admission.ts` 与 `src/infrastructure/clients/owner/billing-model-unreserved-close.ts`；Billing固定生成wire、BFF内部1.4及显式Agent operator消费，非public API/settlement。定向证据在 `test/model-admission-unreserved-close-http.test.mjs`；正常应用由Root另验。
 
 B13审计读沿现Account/admin-identity，`iam-audit-events.ts`只作现安全页的有界IAM client；正式来源与native未验边界见CURRENT。

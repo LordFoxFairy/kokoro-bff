@@ -1,3 +1,4 @@
+import { createProjectExactDownloadSource } from "../../infrastructure/clients/platform/project-exact-download-source.factory.js"
 import { ProjectGrantMiddleware } from "./project-grant.middleware.js"
 import { BeforeApplicationShutdown, Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnModuleInit, RequestMethod } from "@nestjs/common"
 import { DatabaseModule } from "../../common/database/database.module.js"
@@ -24,7 +25,6 @@ import { createProjectDeletion, createProjectRenamer } from "../../application/p
 import { createProjectMutationStore, createProjectReadStore } from "../../infrastructure/postgres/project-store.js"
 import { deleteProjectAggregate, readProjectDeletion } from "../../infrastructure/postgres/project-delete.js"
 import { renameProject } from "../../infrastructure/postgres/project-rename.js"
-import type { ProjectLookup } from "../../application/projects/types.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
 import { ChatModule } from "../chat/chat.module.js"
 import { ProjectPinMiddleware } from "./project-pin.middleware.js"
@@ -33,12 +33,6 @@ import { ProjectSkillPackageInspectionMiddleware } from "./project-skill-package
 import { ProjectSkillDownloadMiddleware } from "./project-skill-download.middleware.js"
 import { SkillsModule } from "../skills/skills.module.js"
 import { ProjectAccessModule } from "./project-access.module.js"
-import type { SkillDownloadHandles } from "../../application/skill-download-handles.js"
-import { ExactSkillDownloadService, exactInstallationRecord, type ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
-import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
-import type { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
-import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
-import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
 import { PostgresProjectScopeReleaseOutboxRepository } from "../../infrastructure/postgres/project-scope-release-outbox-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "../../application/projects/project-scope-release-outbox.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../../application/project-scope-release-outbox-dispatcher.js"
@@ -101,81 +95,7 @@ class ProjectScopeReleaseWorkerLifecycle implements OnModuleInit, BeforeApplicat
     {
       provide: PROJECT_EXACT_DOWNLOAD_SOURCE,
       inject: [BFF_CONFIG, PROJECT_READ_LOOKUP, SKILL_INSTALLATION_CLIENT, SKILL_PACKAGE_INSPECTION_CLIENT, SKILL_DOWNLOAD_HANDLES],
-      useFactory: (
-        config: BffConfig,
-        projectService: ProjectLookup,
-        installations: SkillInstallationConnectClient | null,
-        packageInspection: SkillPackageInspectionConnectClient | null,
-        handles: SkillDownloadHandles,
-      ): ExactSkillDownloadSource | null => {
-        if (!installations || !packageInspection) return null
-        return new ExactSkillDownloadService({
-          handles,
-          objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
-          projectInstallation: {
-            resolve: async (projectId, installationId, context, signal) => {
-              signal.throwIfAborted()
-              const project = await projectService.find(
-                {
-                  tenantId: context.identity.namespace,
-                  subjectId: context.identity.userId,
-                },
-                projectId,
-              )
-              signal.throwIfAborted()
-              if (!project || project.id !== projectId) return null
-              const owner = await installations.get(
-                {
-                  requestId: context.requestId,
-                  tenant: context.identity.namespace,
-                  subject: context.identity.userId,
-                  projectRef: projectId,
-                  installationId,
-                },
-                signal,
-              )
-              if (!("projectRef" in owner) || owner.projectRef !== projectId) throw new Error("skill_response_invalid")
-              const record = exactInstallationRecord(installationId, projectInstallation(owner.installation))
-              const current = await projectService.find(
-                {
-                  tenantId: context.identity.namespace,
-                  subjectId: context.identity.userId,
-                },
-                projectId,
-              )
-              signal.throwIfAborted()
-              return current?.id === projectId ? record : null
-            },
-            download: async (projectId, installationId, context, signal, deadlineAt) => {
-              const value = await packageInspection.downloadProject(
-                {
-                  projectId,
-                  installationId,
-                  requestId: context.requestId,
-                  tenant: context.identity.namespace,
-                  subject: context.identity.userId,
-                },
-                signal,
-                deadlineAt,
-              )
-              assertSkillWireKnown(value)
-              return {
-                sourceRef: value.sourceRef?.value ?? "",
-                revision: value.revision.toString(),
-                filename: value.filename,
-                sizeBytes: value.sizeBytes,
-                contentSha256: value.contentSha256,
-                transfer: {
-                  url: value.transferReference?.url ?? "",
-                  method: value.transferReference?.method ?? "",
-                  requiredHeaders: value.transferReference?.requiredHeaders ?? {},
-                  expiresAt: skillTimestamp(value.transferReference?.expiresAt),
-                },
-              }
-            },
-          },
-        })
-      },
+      useFactory: createProjectExactDownloadSource,
     },
     {
       provide: PROJECT_SCOPE_RELEASE_OUTBOX,
