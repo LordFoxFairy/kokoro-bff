@@ -1,3 +1,11 @@
+## 2026-11-16 Projects／Skills exact-download 装配收口
+
+本轮只重构现下载装配，不改业务语义：两个Module保原token／inject顺序，分别委派platform既有目录中的具名Project／Skill source factory；复用原ExactSkillDownloadService，不增SDK、Base类、空port或第二业务层。原两处owner下载响应在现skill-product-response内归为projectSkillDownloadFact，保递归known-wire与timestamp校验。缺配置null、storageObjectOrigin优先级、Project按原tenant／subject前后鲜验与owner projectRef检查、managed 404/null／502/503及share active/exact资格、signal／deadline与错误映射原样。公开／私有契约、Schema、生成物、依赖与lock不变；package.json仅把新增测试纳入默认显式列表，未改其它脚本。
+
+新增5项特征检查，其中4项先在迁移前原provider经真实Nest测试容器通过，迁移后保持。主控停写7输入逐SHA核等，Node24下相关exact／HTTP／policy／Project HTTP与新装配5文件45 PASS／0 FAIL／0 SKIP，现architecture 111 PASS／0 FAIL／0 SKIP；正式lint、types、build及新文件格式检查与diff通过，独立行为审查CLEAR。现HTTP测试为明确loopback owner fixture，不称真实IAM／Platform／PG或浏览器整链；本轮未改这些协议，不重跑无关全默认、contract生成、业务服务、模型、PG、浏览器或部署。
+
+新测试最初缺acquisitionKind、共用transfer对象两次fixture错误已纠正，未放宽生产校验，也不将fixture失败冒行为RED。主控最初cwd错误使基线命令未运行，纠正后原四相关文件40 PASS；最终证据独立绑定停写输入。Root ignored var/dev/bff-exact-download-cleanup保留主控基线／最终日志和输入摘要。沿BFF本需求PR合main后由Root精确gitlink／真实blob摘要配对；合并及本轮topic清理由最终Git回执确认，不预写未来SHA。Mori及其它仓业务代码不动。
+
 ## 2026-11-13 Task B：BFF 独立 owner 交付门通过，沿原 PR 交付
 
 原 PR #17 当前代码基线 `bec8584f0b185a3ce0a32366199142b945d8812b` 的完整需求范围已完成独立验收与只读审查：包含原生 Session／Share／重授权、个人上下文、模型管理、Custom API 治理消费者、Project 协作与 actor-scoped 执行／多来源回放、共享输入与聚合生命周期、Scheduled 协作及 IAM 管理审计，不仅是最后一个审计切片。

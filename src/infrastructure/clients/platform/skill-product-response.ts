@@ -1,9 +1,12 @@
+import type { SkillDownloadFact } from "../../../application/skill-specification.types.js"
 import { isDeepStrictEqual } from "node:util"
 import { skillPublicationPreconditionSchema, skillDecimalSchema, skillCreationProvenanceSchema, skillCategoryKeysSchema } from "./skill-product-schema.js"
 import { toJson, type Message } from "@bufbuild/protobuf"
 import { timestampDate } from "@bufbuild/protobuf/wkt"
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
 import {
+  type GetSkillPackageDownloadResponse,
+  type GetProjectSkillInstallationPackageDownloadResponse,
   SkillProductFactsSchema,
   SkillCreationProvenanceSchema,
   SkillCoverSchema,
@@ -212,4 +215,21 @@ export function projectSkillProductAck(
 export function projectSkillStateVersion(value: bigint): string {
   if (typeof value !== "bigint" || value < 1n || value > 9_223_372_036_854_775_807n) throw new Error("skill_response_invalid")
   return value.toString()
+}
+
+export function projectSkillDownloadFact(value: GetSkillPackageDownloadResponse | GetProjectSkillInstallationPackageDownloadResponse): SkillDownloadFact {
+  assertSkillWireKnown(value)
+  return {
+    sourceRef: value.sourceRef?.value ?? "",
+    revision: value.revision.toString(),
+    filename: value.filename,
+    sizeBytes: value.sizeBytes,
+    contentSha256: value.contentSha256,
+    transfer: {
+      url: value.transferReference?.url ?? "",
+      method: value.transferReference?.method ?? "",
+      requiredHeaders: value.transferReference?.requiredHeaders ?? {},
+      expiresAt: skillTimestamp(value.transferReference?.expiresAt),
+    },
+  }
 }

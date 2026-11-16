@@ -1,3 +1,4 @@
+import { createSkillExactDownloadSource } from "../../infrastructure/clients/platform/skill-exact-download-source.factory.js"
 import { Inject, Injectable, MiddlewareConsumer, Module, NestModule, OnApplicationShutdown, RequestMethod } from "@nestjs/common"
 import { BffConfigModule } from "../../config/config.module.js"
 import { AuthenticationModule } from "../authentication/authentication.module.js"
@@ -54,11 +55,6 @@ import { AppSkillBindingConnectClient } from "../../infrastructure/clients/platf
 import { SkillListAdmissionClient } from "../../auth/skill-list-admission.client.js"
 import { SkillDownloadHandles } from "../../application/skill-download-handles.js"
 import { SkillPackageInspectionConnectClient } from "../../infrastructure/clients/platform/skill-package-inspection-connect.js"
-import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord } from "../../application/exact-skill-download.js"
-import type { ExactSkillDownloadSource } from "../../application/exact-skill-download.js"
-import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
-import { assertSkillWireKnown, skillTimestamp } from "../../infrastructure/clients/platform/skill-product-response.js"
-import { projectSkillPackageInspectionResponse } from "../../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { PlatformProjectionHttpClient } from "../../infrastructure/clients/platform/projection-http.js"
 import { SkillInstallationAccessModule } from "./skill-installation-access.module.js"
 
@@ -102,87 +98,7 @@ class SkillsRuntime implements OnApplicationShutdown {
     {
       provide: SKILL_EXACT_DOWNLOAD_SOURCE,
       inject: [BFF_CONFIG, SKILL_PRODUCT_CLIENT, SKILL_INSTALLATION_CLIENT, SKILL_SHARE_REPOSITORY, SKILL_DOWNLOAD_HANDLES],
-      useFactory: (
-        config: BffConfig,
-        product: SkillProductConnectClient | null,
-        installations: SkillInstallationConnectClient | null,
-        shares: PostgresSkillShareRepository,
-        handles: SkillDownloadHandles,
-      ): ExactSkillDownloadSource | null => {
-        if (!product || !installations || !shares || !config.platformProjection?.baseUrl || !config.platformProjection.credentialFile || !config.iamBaseUrl)
-          return null
-        const projection = new PlatformProjectionHttpClient(
-          config.platformProjection.baseUrl,
-          config.platformProjection.credentialFile,
-          config.platformProjection.timeoutMs,
-        )
-        return new ExactSkillDownloadService({
-          handles,
-          objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
-          installation: async (id, context, signal) =>
-            exactInstallationRecord(
-              id,
-              projectInstallation(
-                (
-                  await installations.get(
-                    { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id },
-                    signal,
-                  )
-                ).installation,
-              ),
-            ),
-          managed: async (id, context, signal, deadlineAt) => {
-            const result = await projection.readManagedPersonalSkill(
-              "managedSkill",
-              context.identity.namespace,
-              context.identity.userId,
-              context.requestId,
-              { skillId: id },
-              signal,
-              deadlineAt,
-            )
-            if (!result.ok) {
-              if (result.status === 404) return null
-              if (result.status === 502) throw new Error("skill_response_invalid")
-              throw new Error("skill_dependency_unavailable")
-            }
-            return exactManagedRecord(id, result.data)
-          },
-          share: async (id, context, signal, deadlineAt) => {
-            const share = await shares.findActive(context.identity.namespace, id)
-            if (!share) return null
-            const raw = await product.inspect(
-              { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef },
-              signal,
-              deadlineAt,
-            )
-            assertSkillWireKnown(raw)
-            const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
-            return { sourceRef: value.source_ref, revision: value.revision }
-          },
-          download: async (sourceRef, context, signal, deadlineAt) => {
-            const value = await product.download(
-              { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef },
-              signal,
-              deadlineAt,
-            )
-            assertSkillWireKnown(value)
-            return {
-              sourceRef: value.sourceRef?.value ?? "",
-              revision: value.revision.toString(),
-              filename: value.filename,
-              sizeBytes: value.sizeBytes,
-              contentSha256: value.contentSha256,
-              transfer: {
-                url: value.transferReference?.url ?? "",
-                method: value.transferReference?.method ?? "",
-                requiredHeaders: value.transferReference?.requiredHeaders ?? {},
-                expiresAt: skillTimestamp(value.transferReference?.expiresAt),
-              },
-            }
-          },
-        })
-      },
+      useFactory: createSkillExactDownloadSource,
     },
     {
       provide: OPEN_APP_MANAGEMENT_ADMISSION,
